@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase.ts';
+import { User, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { auth, googleAuthProvider } from './firebase.ts';
 import { useStore } from '../store/useStore.ts';
 
 interface AuthContextType {
@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   isGuest: boolean;
   authError: string | null;
+  signInWithGoogle: () => Promise<void>;
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isGuest: false,
   authError: null,
+  signInWithGoogle: async () => {},
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
@@ -75,7 +77,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setResources, setCategories]);
 
   // Sync effect: When user is logged in and data changes, push to backend.
-  // We use a simple debounce mechanism or just save on every change for simplicity.
   useEffect(() => {
     if (!user || loading) return;
     
@@ -100,13 +101,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearTimeout(timeout);
   }, [resources, categories, user, loading]);
 
+  const signInWithGoogle = async () => {
+    try {
+      setAuthError(null);
+      await signInWithPopup(auth, googleAuthProvider);
+    } catch (error: any) {
+      console.error('Error signing in with Google', error);
+      if (error.code === 'auth/unauthorized-domain') {
+        setAuthError("Domain not authorized in Firebase. Please add 'asia-southeast1.run.app' under Authentication > Settings > Authorized domains in Firebase Console.");
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        // User just closed popup, no error needed
+      } else {
+        setAuthError(error.message || "Failed to sign in with Google.");
+      }
+    }
+  };
+
   const signIn = async (email: string, pass: string) => {
     try {
       setAuthError(null);
       await signInWithEmailAndPassword(auth, email, pass);
     } catch (error: any) {
       console.error('Error signing in', error);
-      setAuthError(error.message || "Failed to sign in.");
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setAuthError("Incorrect email or password. Please try again or sign up if you don't have an account.");
+      } else if (error.code === 'auth/too-many-requests') {
+        setAuthError("Too many failed login attempts. Please try again later.");
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setAuthError("Email/Password sign-in is not enabled in this project. Please use 'Sign in with Google' above.");
+      } else {
+        setAuthError(error.message || "Failed to sign in.");
+      }
     }
   };
 
@@ -116,7 +141,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await createUserWithEmailAndPassword(auth, email, pass);
     } catch (error: any) {
       console.error('Error signing up', error);
-      setAuthError(error.message || "Failed to sign up.");
+      if (error.code === 'auth/email-already-in-use') {
+        setAuthError("This email is already registered. Please switch to Sign in below.");
+      } else if (error.code === 'auth/weak-password') {
+        setAuthError("Password is too weak. Please use at least 6 characters.");
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setAuthError("Email/Password sign-up is not enabled in this project. Please use 'Sign in with Google' above.");
+      } else {
+        setAuthError(error.message || "Failed to sign up.");
+      }
     }
   };
 
@@ -142,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isGuest, authError, signIn, signUp, signOut, continueAsGuest, clearAuthError }}>
+    <AuthContext.Provider value={{ user, loading, isGuest, authError, signInWithGoogle, signIn, signUp, signOut, continueAsGuest, clearAuthError }}>
       {children}
     </AuthContext.Provider>
   );
