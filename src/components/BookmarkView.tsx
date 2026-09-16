@@ -1,13 +1,42 @@
-import { useState, useMemo, type Key, type FormEvent } from 'react';
+import { useState, useMemo, type Key, type FormEvent, type CSSProperties } from 'react';
 import { useStore } from '../store/useStore';
 import { Resource, Category } from '../types';
-import { Globe, Pin, MoreHorizontal, Edit2, Trash2, FolderPlus, Plus, Tag } from 'lucide-react';
+import { Globe, Pin, MoreHorizontal, Edit2, Trash2, FolderPlus, Plus, Tag, GripVertical } from 'lucide-react';
 import { cn } from './Sidebar';
 import { getFaviconUrl, getDuckDuckGoFaviconUrl } from '../utils/url-helpers';
 import { CategoryIcon } from './CategoryIcon';
 import { CategoryModal } from './CategoryModal';
+import { 
+  DndContext, 
+  DragEndEvent, 
+  PointerSensor, 
+  KeyboardSensor, 
+  useSensor, 
+  useSensors, 
+  closestCenter 
+} from '@dnd-kit/core';
+import { 
+  SortableContext, 
+  rectSortingStrategy, 
+  useSortable, 
+  sortableKeyboardCoordinates 
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdit: (r: Resource) => void, subcategoryName?: string, key?: Key }) {
+function BookmarkItem({ 
+  item, 
+  onEdit, 
+  subcategoryName, 
+  dragHandleProps, 
+  isDragging 
+}: { 
+  item: Resource; 
+  onEdit: (r: Resource) => void; 
+  subcategoryName?: string; 
+  key?: Key;
+  dragHandleProps?: Record<string, any>;
+  isDragging?: boolean;
+}) {
   const { togglePinned, deleteResource } = useStore();
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -47,9 +76,13 @@ function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdi
   };
 
   return (
-    <div className="flex flex-col items-center gap-1.5 group relative">
+    <div className={cn("flex flex-col items-center gap-1.5 group relative select-none", isDragging ? "opacity-50 scale-105" : "")}>
       <div 
-        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center cursor-pointer hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700/50 transition-all overflow-hidden relative shadow-sm hover:-translate-y-0.5"
+        {...(dragHandleProps || {})}
+        className={cn(
+          "w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center cursor-pointer hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700/50 transition-all overflow-hidden relative shadow-sm hover:-translate-y-0.5",
+          isDragging ? "ring-2 ring-indigo-500 shadow-xl border-indigo-400" : ""
+        )}
         onClick={handleOpen}
       >
         {currentIconUrl ? (
@@ -67,20 +100,31 @@ function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdi
         )}
         
         {/* Overlay actions on hover */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col sm:flex-row items-center justify-center gap-2 backdrop-blur-[2px] rounded-2xl">
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col sm:flex-row items-center justify-center gap-1.5 backdrop-blur-[2px] rounded-2xl">
+          {dragHandleProps && (
+            <div 
+              {...dragHandleProps}
+              onClick={(e) => e.stopPropagation()}
+              className="p-1.5 rounded-full text-white/90 hover:text-white hover:bg-white/20 cursor-grab active:cursor-grabbing transition-colors"
+              title="Drag to reorder"
+            >
+              <GripVertical size={16} />
+            </div>
+          )}
+
           <button 
             onClick={(e) => { e.stopPropagation(); togglePinned(item.id); }}
             className={cn("p-1.5 rounded-full text-white hover:bg-white/20 transition-colors", item.pinned ? "text-indigo-400" : "")}
             title={item.pinned ? "Unpin" : "Pin"}
           >
-            <Pin size={18} className={item.pinned ? "fill-current" : ""} />
+            <Pin size={17} className={item.pinned ? "fill-current" : ""} />
           </button>
           
           <button 
             onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
             className="p-1.5 rounded-full text-white hover:bg-white/20 transition-colors"
           >
-            <MoreHorizontal size={18} />
+            <MoreHorizontal size={17} />
           </button>
         </div>
       </div>
@@ -115,9 +159,9 @@ function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdi
             {confirmDelete ? (
               <button 
                 onClick={() => { 
-                  deleteResource(item.id);
-                  setShowMenu(false);
-                  setConfirmDelete(false);
+                  deleteResource(item.id); 
+                  setShowMenu(false); 
+                  setConfirmDelete(false); 
                 }}
                 className="w-full flex items-center justify-between px-3 py-2 text-sm text-white bg-red-500 hover:bg-red-600 font-medium"
               >
@@ -138,9 +182,65 @@ function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdi
   );
 }
 
+function SortableBookmarkItem({
+  item,
+  onEdit,
+  subcategoryName,
+}: {
+  item: Resource;
+  onEdit: (r: Resource) => void;
+  subcategoryName?: string;
+  key?: Key;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 40 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <BookmarkItem
+        item={item}
+        onEdit={onEdit}
+        subcategoryName={subcategoryName}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        isDragging={isDragging}
+      />
+    </div>
+  );
+}
+
 export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void, onAdd?: (defaultCategoryId?: string, defaultSubcategoryId?: string) => void }) {
-  const { resources, categories, searchQuery, addSubcategory } = useStore();
+  const { resources, categories, searchQuery, addSubcategory, reorderResources } = useStore();
   
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent, scopeIds: string[]) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      reorderResources(String(active.id), String(over.id), scopeIds);
+    }
+  };
+
   // Local active subcategory filter per category group
   const [selectedSubcategories, setSelectedSubcategories] = useState<Record<string, string | null>>({});
   const [categoryModalConfig, setCategoryModalConfig] = useState<{
@@ -169,7 +269,11 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
     );
   }
 
-  const pinned = bookmarks.filter(b => b.pinned);
+  const pinned = useMemo(() => {
+    return bookmarks
+      .filter(b => b.pinned)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (b.createdAt - a.createdAt));
+  }, [bookmarks]);
 
   // Group all bookmarks by parent category
   const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
@@ -180,6 +284,10 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
       const cat = categories.find(c => c.id === curr.categoryId)?.name || 'Uncategorized';
       if (!map[cat]) map[cat] = [];
       map[cat].push(curr);
+    });
+    // Ensure bookmarks within each category preserve manual order, fallback to createdAt
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (b.createdAt - a.createdAt));
     });
     return map;
   }, [bookmarks, categories]);
@@ -208,7 +316,7 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
   return (
     <div className="p-4 sm:p-8 space-y-10 pb-32">
       
-      {/* 1. Pinned Section */}
+      {/* 1. Pinned Section with Drag-and-Drop */}
       {pinned.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
@@ -218,17 +326,30 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
             <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
               {pinned.length}
             </span>
+            <span className="text-[11px] text-slate-400 hidden sm:inline ml-1 font-normal">
+              (Drag to reorder)
+            </span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4">
-            {pinned.map(b => {
-              const subName = b.subcategoryId ? categories.find(c => c.id === b.subcategoryId)?.name : undefined;
-              return <BookmarkItem key={b.id} item={b} onEdit={onEdit} subcategoryName={subName} />;
-            })}
-          </div>
+
+          <DndContext
+            id="dnd-pinned-bookmarks"
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(event) => handleDragEnd(event, pinned.map(b => b.id))}
+          >
+            <SortableContext items={pinned.map(b => b.id)} strategy={rectSortingStrategy}>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4">
+                {pinned.map(b => {
+                  const subName = b.subcategoryId ? categories.find(c => c.id === b.subcategoryId)?.name : undefined;
+                  return <SortableBookmarkItem key={b.id} item={b} onEdit={onEdit} subcategoryName={subName} />;
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
         </div>
       )}
 
-      {/* 2. Main Category Groups with Subcategory Filters & Badges */}
+      {/* 2. Main Category Groups with Subcategory Filters & Drag-and-Drop */}
       {groupedEntries
         .sort(([catA], [catB]) => catA.localeCompare(catB))
         .map(([categoryName, items]) => {
@@ -260,6 +381,9 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                   </h2>
                   <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
                     {items.length}
+                  </span>
+                  <span className="text-[11px] text-slate-400 hidden sm:inline ml-1 font-normal">
+                    (Drag cards to reorder)
                   </span>
                 </div>
 
@@ -359,13 +483,22 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                 </div>
               )}
 
-              {/* Bookmark Grid */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4">
-                {displayItems.map(b => {
-                  const subName = b.subcategoryId ? categories.find(c => c.id === b.subcategoryId)?.name : undefined;
-                  return <BookmarkItem key={b.id} item={b} onEdit={onEdit} subcategoryName={subName} />;
-                })}
-              </div>
+              {/* Bookmark Grid with Drag-and-Drop */}
+              <DndContext
+                id={`dnd-category-${categoryId || categoryName}`}
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event) => handleDragEnd(event, displayItems.map(b => b.id))}
+              >
+                <SortableContext items={displayItems.map(b => b.id)} strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4">
+                    {displayItems.map(b => {
+                      const subName = b.subcategoryId ? categories.find(c => c.id === b.subcategoryId)?.name : undefined;
+                      return <SortableBookmarkItem key={b.id} item={b} onEdit={onEdit} subcategoryName={subName} />;
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
           );
         })}

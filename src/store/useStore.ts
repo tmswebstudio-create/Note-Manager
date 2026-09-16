@@ -20,7 +20,7 @@ interface AppState {
   toggleFavorite: (id: string) => void;
   toggleComplete: (id: string) => void;
   togglePinned: (id: string) => void;
-  reorderResources: (startIndex: number, endIndex: number) => void;
+  reorderResources: (activeIdOrStartIndex: string | number, overIdOrEndIndex: string | number, scopeIds?: string[]) => void;
   
   addCategory: (name: string, parentId?: string | null, icon?: string, type?: 'resource' | 'bookmark') => string;
   addSubcategory: (parentId: string, name: string, icon?: string, type?: 'resource' | 'bookmark') => string;
@@ -94,11 +94,62 @@ export const useStore = create<AppState>()(
         )
       })),
 
-      reorderResources: (startIndex, endIndex) => set((state) => {
-        const result = Array.from(state.resources);
-        const [removed] = result.splice(startIndex, 1);
-        result.splice(endIndex, 0, removed);
-        return { resources: result };
+      reorderResources: (activeIdOrStartIndex, overIdOrEndIndex, scopeIds) => set((state) => {
+        if (typeof activeIdOrStartIndex === 'number' && typeof overIdOrEndIndex === 'number') {
+          const result = Array.from(state.resources);
+          const [removed] = result.splice(activeIdOrStartIndex, 1);
+          result.splice(overIdOrEndIndex, 0, removed);
+          result.forEach((r, idx) => {
+            r.order = idx;
+          });
+          return { resources: result };
+        }
+
+        const activeId = String(activeIdOrStartIndex);
+        const overId = String(overIdOrEndIndex);
+        if (activeId === overId) return state;
+
+        if (scopeIds && scopeIds.length > 0) {
+          const oldIndex = scopeIds.indexOf(activeId);
+          const newIndex = scopeIds.indexOf(overId);
+          if (oldIndex === -1 || newIndex === -1) return state;
+
+          const newScopeIds = Array.from(scopeIds);
+          const [removed] = newScopeIds.splice(oldIndex, 1);
+          newScopeIds.splice(newIndex, 0, removed);
+
+          const orderMap = new Map<string, number>();
+          newScopeIds.forEach((id, idx) => {
+            orderMap.set(id, idx);
+          });
+
+          const scopeResources = newScopeIds
+            .map(id => state.resources.find(r => r.id === id))
+            .filter((r): r is Resource => Boolean(r))
+            .map(r => ({ ...r, order: orderMap.get(r.id) ?? r.order }));
+
+          let scopeIndex = 0;
+          const updatedResources = state.resources.map(r => {
+            if (orderMap.has(r.id)) {
+              return scopeResources[scopeIndex++];
+            }
+            return r;
+          });
+
+          return { resources: updatedResources };
+        } else {
+          const oldIndex = state.resources.findIndex(r => r.id === activeId);
+          const newIndex = state.resources.findIndex(r => r.id === overId);
+          if (oldIndex === -1 || newIndex === -1) return state;
+
+          const result = Array.from(state.resources);
+          const [removed] = result.splice(oldIndex, 1);
+          result.splice(newIndex, 0, removed);
+          result.forEach((r, idx) => {
+            r.order = idx;
+          });
+          return { resources: result };
+        }
       }),
 
       addCategory: (name, parentId = null, icon, type = 'resource') => {

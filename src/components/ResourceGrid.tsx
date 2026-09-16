@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type CSSProperties, type Key } from 'react';
 import { useStore } from '../store/useStore';
 import { ResourceCard } from './ResourceCard';
 import { Resource, Category } from '../types';
@@ -10,6 +10,57 @@ import { cn } from './Sidebar';
 import { CategoryIcon } from './CategoryIcon';
 import { CategoryModal } from './CategoryModal';
 import { isResourceCategory } from '../utils/category-helpers';
+import { 
+  DndContext, 
+  DragEndEvent, 
+  PointerSensor, 
+  KeyboardSensor, 
+  useSensor, 
+  useSensors, 
+  closestCenter 
+} from '@dnd-kit/core';
+import { 
+  SortableContext, 
+  rectSortingStrategy, 
+  useSortable, 
+  sortableKeyboardCoordinates 
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableResourceCard({
+  resource,
+  onEdit,
+}: {
+  resource: Resource;
+  onEdit: (r: Resource) => void;
+  key?: Key;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: resource.id });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 40 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="h-full">
+      <ResourceCard
+        resource={resource}
+        onEdit={onEdit}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        isDragging={isDragging}
+      />
+    </div>
+  );
+}
 
 export function ResourceGrid({ 
   onEdit, 
@@ -28,8 +79,27 @@ export function ResourceGrid({
     setActiveView,
     activeView, 
     searchQuery,
-    deleteCategory
+    deleteCategory,
+    reorderResources
   } = useStore();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      reorderResources(String(active.id), String(over.id), filtered.map(r => r.id));
+    }
+  };
 
   const [categoryModalConfig, setCategoryModalConfig] = useState<{
     isOpen: boolean;
@@ -105,7 +175,7 @@ export function ResourceGrid({
   if (activeView === 'recent') {
     filtered = [...filtered].sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0));
   } else {
-    filtered = [...filtered].sort((a, b) => b.createdAt - a.createdAt);
+    filtered = [...filtered].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (b.createdAt - a.createdAt));
   }
 
   const openAddCategoryModal = () => {
@@ -443,6 +513,9 @@ export function ResourceGrid({
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
               {filtered.length}
             </span>
+            <span className="text-[11px] text-slate-400 hidden sm:inline ml-1 font-normal">
+              (Drag cards to reorder)
+            </span>
           </div>
 
           {/* Type Filter Buttons (All | Videos | Posts) */}
@@ -512,11 +585,20 @@ export function ResourceGrid({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
-            {filtered.map(resource => (
-              <ResourceCard key={resource.id} resource={resource} onEdit={onEdit} />
-            ))}
-          </div>
+          <DndContext
+            id={`dnd-resources-${activeCategoryId || activeView}`}
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={filtered.map(r => r.id)} strategy={rectSortingStrategy}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+                {filtered.map(resource => (
+                  <SortableResourceCard key={resource.id} resource={resource} onEdit={onEdit} />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </section>
 

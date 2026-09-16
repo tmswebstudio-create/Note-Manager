@@ -1,11 +1,22 @@
 import { useStore } from '../store/useStore';
 import { Resource } from '../types';
-import { Play, FileText, Globe, ExternalLink, MoreHorizontal, Star, Trash2, Edit2, CheckCircle2, Circle, Tag } from 'lucide-react';
+import { Play, FileText, Globe, ExternalLink, MoreHorizontal, Star, Trash2, Edit2, CheckCircle2, Circle, Tag, GripVertical } from 'lucide-react';
 import { useState, type Key } from 'react';
 import { cn } from './Sidebar';
 import { getResourceImage } from '../utils/url-helpers';
 
-export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit: (r: Resource) => void, key?: Key }) {
+export function ResourceCard({ 
+  resource, 
+  onEdit,
+  dragHandleProps,
+  isDragging
+}: { 
+  resource: Resource; 
+  onEdit: (r: Resource) => void; 
+  key?: Key;
+  dragHandleProps?: Record<string, any>;
+  isDragging?: boolean;
+}) {
   const { toggleFavorite, deleteResource, toggleComplete, categories } = useStore();
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -36,7 +47,10 @@ export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit:
   };
 
   return (
-    <div className="group flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 transition-all duration-300 relative">
+    <div className={cn(
+      "group flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 transition-all duration-300 relative h-full",
+      isDragging ? "ring-2 ring-indigo-500 shadow-2xl scale-[1.02] opacity-75 z-30" : ""
+    )}>
       
       {/* Visual / Image Area */}
       <div 
@@ -84,6 +98,18 @@ export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit:
             </div>
           )}
         </div>
+
+        {/* Top Right Drag Handle */}
+        {dragHandleProps && (
+          <div
+            {...dragHandleProps}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-2.5 right-2.5 z-10 p-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900/90 text-white/90 hover:text-white backdrop-blur-sm cursor-grab active:cursor-grabbing transition-all opacity-0 group-hover:opacity-100 shadow-md"
+            title="Drag to reorder"
+          >
+            <GripVertical size={14} />
+          </div>
+        )}
       </div>
 
       {/* Content */}
