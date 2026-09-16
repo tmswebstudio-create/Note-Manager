@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, type FormEvent, type ChangeEvent, type DragEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, type FormEvent, type ChangeEvent, type DragEvent } from 'react';
 import { useStore } from '../store/useStore';
 import { Category } from '../types';
 import { 
@@ -58,6 +58,33 @@ export function CategoryModal({
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // When opening modal: if adding new item, keep everything completely blank (no dummy data)
+  useEffect(() => {
+    if (isOpen) {
+      if (editingCategory) {
+        setName(editingCategory.name || '');
+        setSelectedIcon(editingCategory.icon || '');
+        const isCustom = Boolean(
+          editingCategory.icon && 
+          (editingCategory.icon.startsWith('http') || 
+           editingCategory.icon.startsWith('data:') || 
+           editingCategory.icon.startsWith('blob:') ||
+           editingCategory.icon.match(/\.(jpg|jpeg|png|svg|webp|ico|gif)($|\?)/i))
+        );
+        setActiveTab(isCustom ? 'custom' : 'library');
+      } else {
+        setName('');
+        setSelectedIcon('');
+        setActiveTab('library');
+      }
+      setIconSearch('');
+      setSelectedIconCategory('All');
+      setError('');
+      setIsDraggingFile(false);
+      setUploadedFileName(null);
+    }
+  }, [isOpen, editingCategory]);
 
   const handleProcessImageFile = (file: File) => {
     if (!file) return;
@@ -242,7 +269,7 @@ export function CategoryModal({
                 <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-inner">
                   <CategoryIcon 
                     icon={selectedIcon} 
-                    name={name || 'Category'} 
+                    name={name} 
                     isSubcategory={isSubcategory} 
                     size="md" 
                   />

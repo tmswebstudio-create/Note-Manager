@@ -499,9 +499,9 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                   )}
                   {onAdd && (
                     <button
-                      onClick={() => onAdd(categoryId, activeSubId || undefined)}
+                      onClick={() => onAdd()}
                       className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                      title={`Add bookmark to ${categoryName}`}
+                      title="Add bookmark"
                     >
                       <Plus size={16} />
                     </button>

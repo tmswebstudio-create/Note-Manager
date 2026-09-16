@@ -583,7 +583,7 @@ export function ResourceGrid({
 
               {onAddResource && (
                 <button
-                  onClick={() => onAddResource(activeCategoryId, activeSubcategoryId || undefined)}
+                  onClick={() => onAddResource()}
                   className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center gap-1.5 shadow-sm shadow-indigo-600/25 transition-all active:scale-95"
                 >
                   <Plus size={14} />
@@ -724,7 +724,7 @@ export function ResourceGrid({
             </p>
             {onAddResource && !searchQuery && (
               <button 
-                onClick={() => onAddResource(activeCategoryId || undefined, activeSubcategoryId || undefined)}
+                onClick={() => onAddResource()}
                 className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm shadow-indigo-600/20 transition-all active:scale-95"
               >
                 <Plus size={15} />

@@ -38,15 +38,15 @@ export function AppShell() {
     }
   };
 
-  const handleAddBookmark = (defaultCategoryId?: string, defaultSubcategoryId?: string) => {
+  const handleAddBookmark = () => {
     setEditingResource(undefined);
-    setModalCategoryDefaults({ categoryId: defaultCategoryId, subcategoryId: defaultSubcategoryId });
+    setModalCategoryDefaults({});
     setIsBookmarkModalOpen(true);
   };
 
-  const handleAddResource = (defaultCategoryId?: string, defaultSubcategoryId?: string) => {
+  const handleAddResource = () => {
     setEditingResource(undefined);
-    setModalCategoryDefaults({ categoryId: defaultCategoryId, subcategoryId: defaultSubcategoryId });
+    setModalCategoryDefaults({});
     setIsResourceModalOpen(true);
   };
 

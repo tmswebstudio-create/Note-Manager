@@ -26,40 +26,28 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
   
   const [url, setUrl] = useState(editResource?.url || '');
   const [title, setTitle] = useState(editResource?.title || '');
-  const [type, setType] = useState<'Video' | 'Post'>((editResource?.type === 'Post' ? 'Post' : 'Video'));
+  const [type, setType] = useState<'Video' | 'Post' | ''>(editResource?.type ? (editResource.type as 'Video' | 'Post') : '');
   
   // Parent categories (strictly resource categories)
   const parentCategories = useMemo(() => {
     return categories.filter(c => !c.parentId && isResourceCategory(c, categories, resources));
   }, [categories, resources]);
 
-  // Initial Category Setup
+  // Initial Category Setup - strictly blank for new items (no dummy data)
   const initialCategoryName = useMemo(() => {
     if (editResource?.categoryId) {
       return categories.find(c => c.id === editResource.categoryId)?.name || '';
     }
-    if (defaultCategoryId) {
-      return categories.find(c => c.id === defaultCategoryId)?.name || '';
-    }
-    if (activeCategoryId) {
-      return categories.find(c => c.id === activeCategoryId)?.name || '';
-    }
-    return parentCategories.length > 0 ? parentCategories[0].name : 'Resources';
-  }, [editResource, defaultCategoryId, activeCategoryId, categories, parentCategories]);
+    return '';
+  }, [editResource, categories]);
 
-  // Initial Subcategory Setup
+  // Initial Subcategory Setup - strictly blank for new items
   const initialSubcategoryName = useMemo(() => {
     if (editResource?.subcategoryId) {
       return categories.find(c => c.id === editResource.subcategoryId)?.name || '';
     }
-    if (defaultSubcategoryId) {
-      return categories.find(c => c.id === defaultSubcategoryId)?.name || '';
-    }
-    if (activeSubcategoryId) {
-      return categories.find(c => c.id === activeSubcategoryId)?.name || '';
-    }
     return '';
-  }, [editResource, defaultSubcategoryId, activeSubcategoryId, categories]);
+  }, [editResource, categories]);
       
   const [categoryInput, setCategoryInput] = useState(initialCategoryName);
   const [subcategoryInput, setSubcategoryInput] = useState(initialSubcategoryName);
@@ -71,6 +59,36 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [fetchedStatus, setFetchedStatus] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // When adding a new resource, ensure all fields are completely blank (no dummy data)
+  useEffect(() => {
+    if (editResource) {
+      setUrl(editResource.url || '');
+      setTitle(editResource.title || '');
+      setType(editResource.type === 'Post' ? 'Post' : 'Video');
+      const catName = categories.find(c => c.id === editResource.categoryId)?.name || '';
+      const subcatName = editResource.subcategoryId 
+        ? (categories.find(c => c.id === editResource.subcategoryId)?.name || '') 
+        : '';
+      setCategoryInput(catName);
+      setSubcategoryInput(subcatName);
+      setShowSubcategoryField(Boolean(subcatName));
+      setCoverImage(editResource.coverImage || '');
+      setDescription(editResource.description || '');
+    } else {
+      setUrl('');
+      setTitle('');
+      setType('');
+      setCategoryInput('');
+      setSubcategoryInput('');
+      setShowSubcategoryField(false);
+      setCoverImage('');
+      setDescription('');
+    }
+    setError('');
+    setFetchedStatus(null);
+    setIsLoadingMetadata(false);
+  }, [editResource]);
 
   // Selected parent category object
   const currentSelectedCategory = useMemo(() => {
@@ -204,12 +222,14 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
 
     // Automatically fetch thumbnail if blank
     const finalCoverImage = coverImage.trim() || getAutoThumbnail(cleanUrl);
+    const isVideoUrl = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be') || cleanUrl.includes('vimeo.com');
+    const finalType: 'Video' | 'Post' = (type as 'Video' | 'Post') || (isVideoUrl ? 'Video' : 'Post');
 
     if (editResource) {
       updateResource(editResource.id, { 
         url: cleanUrl, 
         title: title.trim(), 
-        type, 
+        type: finalType, 
         categoryId: finalCategoryId,
         subcategoryId: finalSubcategoryId || null,
         coverImage: finalCoverImage, 
@@ -219,7 +239,7 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
       addResource({ 
         url: cleanUrl, 
         title: title.trim(), 
-        type, 
+        type: finalType, 
         categoryId: finalCategoryId,
         subcategoryId: finalSubcategoryId || null,
         coverImage: finalCoverImage, 

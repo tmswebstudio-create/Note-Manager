@@ -26,33 +26,21 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
     return categories.filter(c => !c.parentId && isBookmarkCategory(c, categories, resources));
   }, [categories, resources]);
 
-  // Initial Category Setup
+  // Initial Category Setup - strictly blank for new items (no dummy data)
   const initialCategoryName = useMemo(() => {
     if (editResource?.categoryId) {
       return categories.find(c => c.id === editResource.categoryId)?.name || '';
     }
-    if (defaultCategoryId) {
-      return categories.find(c => c.id === defaultCategoryId)?.name || '';
-    }
-    if (activeCategoryId) {
-      return categories.find(c => c.id === activeCategoryId)?.name || '';
-    }
-    return parentCategories.length > 0 ? parentCategories[0].name : 'Websites';
-  }, [editResource, defaultCategoryId, activeCategoryId, categories, parentCategories]);
+    return '';
+  }, [editResource, categories]);
 
-  // Initial Subcategory Setup
+  // Initial Subcategory Setup - strictly blank for new items
   const initialSubcategoryName = useMemo(() => {
     if (editResource?.subcategoryId) {
       return categories.find(c => c.id === editResource.subcategoryId)?.name || '';
     }
-    if (defaultSubcategoryId) {
-      return categories.find(c => c.id === defaultSubcategoryId)?.name || '';
-    }
-    if (activeSubcategoryId) {
-      return categories.find(c => c.id === activeSubcategoryId)?.name || '';
-    }
     return '';
-  }, [editResource, defaultSubcategoryId, activeSubcategoryId, categories]);
+  }, [editResource, categories]);
       
   const [categoryInput, setCategoryInput] = useState(initialCategoryName);
   const [subcategoryInput, setSubcategoryInput] = useState(initialSubcategoryName);
@@ -62,6 +50,32 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [fetchedStatus, setFetchedStatus] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // When adding a new bookmark, ensure all fields are completely blank (no dummy data)
+  useEffect(() => {
+    if (editResource) {
+      setUrl(editResource.url || '');
+      setTitle(editResource.title || '');
+      const catName = categories.find(c => c.id === editResource.categoryId)?.name || '';
+      const subcatName = editResource.subcategoryId 
+        ? (categories.find(c => c.id === editResource.subcategoryId)?.name || '') 
+        : '';
+      setCategoryInput(catName);
+      setSubcategoryInput(subcatName);
+      setShowSubcategoryField(Boolean(subcatName));
+      setFaviconUrl(editResource.coverImage || '');
+    } else {
+      setUrl('');
+      setTitle('');
+      setCategoryInput('');
+      setSubcategoryInput('');
+      setShowSubcategoryField(false);
+      setFaviconUrl('');
+    }
+    setError('');
+    setFetchedStatus(null);
+    setIsLoadingMetadata(false);
+  }, [editResource]);
 
   // Selected parent category object
   const currentSelectedCategory = useMemo(() => {
