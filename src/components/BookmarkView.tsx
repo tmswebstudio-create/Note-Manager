@@ -154,8 +154,8 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
     parentId: null,
   });
 
-  // Filter for website resources
-  const isWebsite = (type: string) => type === 'Website' || ['Article', 'Bookmark', 'Documentation'].includes(type);
+  // Filter strictly for website bookmarks
+  const isWebsite = (type: string) => type === 'Website';
   let bookmarks = resources.filter(r => isWebsite(r.type));
 
   if (searchQuery) {

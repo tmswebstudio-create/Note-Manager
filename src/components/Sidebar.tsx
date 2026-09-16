@@ -260,6 +260,7 @@ interface SidebarProps {
 
 export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddResource }: SidebarProps) {
   const { 
+    resources,
     categories, 
     activeCategoryId, 
     activeSubcategoryId, 
@@ -296,6 +297,11 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Calculate learning resources and bookmark counts
+  const bookmarkCount = useMemo(() => resources.filter(r => r.type === 'Website').length, [resources]);
+  const learningResourceCount = useMemo(() => resources.filter(r => r.type !== 'Website').length, [resources]);
+  const favoriteResourceCount = useMemo(() => resources.filter(r => r.type !== 'Website' && r.favorite).length, [resources]);
 
   // Separate parent categories from subcategories
   const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
@@ -391,7 +397,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
         {/* Navigation Sections */}
         <div className="flex-1 overflow-y-auto py-4 overflow-x-hidden space-y-6">
           
-          {/* SECTION 1: Web Bookmarks */}
+          {/* SECTION 1: Web Bookmarks (Independent Section) */}
           <div className="px-3">
             <div className={cn("px-1 mb-1.5 flex items-center", isSidebarCollapsed ? "justify-center" : "justify-between")}>
               {!isSidebarCollapsed && (
@@ -413,18 +419,30 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
             <button 
               onClick={() => { setActiveView('bookmarks'); setIsMobileOpen(false); }}
               className={cn("w-full flex items-center px-3 py-2 text-sm font-medium rounded-xl transition-colors", 
-                isSidebarCollapsed ? "justify-center" : "gap-3",
+                isSidebarCollapsed ? "justify-center" : "justify-between",
                 activeView === 'bookmarks' 
                   ? "bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-semibold" 
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800")}
               title={isSidebarCollapsed ? "Web Bookmarks" : undefined}
             >
-              <Globe size={18} className="shrink-0 text-indigo-500" /> 
-              {!isSidebarCollapsed && <span className="truncate">All Bookmarks</span>}
+              <div className="flex items-center gap-3 min-w-0">
+                <Globe size={18} className="shrink-0 text-indigo-500" /> 
+                {!isSidebarCollapsed && <span className="truncate">All Bookmarks</span>}
+              </div>
+              {!isSidebarCollapsed && (
+                <span className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                  activeView === 'bookmarks' 
+                    ? "bg-indigo-200/80 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-200" 
+                    : "bg-slate-200/70 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                )}>
+                  {bookmarkCount}
+                </span>
+              )}
             </button>
           </div>
 
-          {/* SECTION 2: Learning Resources */}
+          {/* SECTION 2: Learning Resources (Includes All Resources, Favorites, Recents, and Nested Playlists & Categories) */}
           <div className="px-3">
             <div className={cn("px-1 mb-1.5 flex items-center", isSidebarCollapsed ? "justify-center" : "justify-between")}>
               {!isSidebarCollapsed && (
@@ -447,26 +465,45 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
               <button 
                 onClick={() => { setActiveView('home'); setIsMobileOpen(false); }}
                 className={cn("w-full flex items-center px-3 py-2 text-sm font-medium rounded-xl transition-colors", 
-                  isSidebarCollapsed ? "justify-center" : "gap-3",
+                  isSidebarCollapsed ? "justify-center" : "justify-between",
                   activeView === 'home' 
                     ? "bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-semibold" 
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800")}
                 title={isSidebarCollapsed ? "All Resources" : undefined}
               >
-                <Layers size={18} className="shrink-0" /> 
-                {!isSidebarCollapsed && <span className="truncate">All Resources</span>}
+                <div className="flex items-center gap-3 min-w-0">
+                  <Layers size={18} className="shrink-0" /> 
+                  {!isSidebarCollapsed && <span className="truncate">All Resources</span>}
+                </div>
+                {!isSidebarCollapsed && (
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                    activeView === 'home' 
+                      ? "bg-indigo-200/80 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-200" 
+                      : "bg-slate-200/70 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                  )}>
+                    {learningResourceCount}
+                  </span>
+                )}
               </button>
               <button 
                 onClick={() => { setActiveView('favorites'); setIsMobileOpen(false); }}
                 className={cn("w-full flex items-center px-3 py-2 text-sm font-medium rounded-xl transition-colors", 
-                  isSidebarCollapsed ? "justify-center" : "gap-3",
+                  isSidebarCollapsed ? "justify-center" : "justify-between",
                   activeView === 'favorites' 
                     ? "bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-semibold" 
                     : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800")}
                 title={isSidebarCollapsed ? "Favorites" : undefined}
               >
-                <Star size={18} className="shrink-0 text-amber-500" /> 
-                {!isSidebarCollapsed && <span className="truncate">Favorites</span>}
+                <div className="flex items-center gap-3 min-w-0">
+                  <Star size={18} className="shrink-0 text-amber-500" /> 
+                  {!isSidebarCollapsed && <span className="truncate">Favorites</span>}
+                </div>
+                {!isSidebarCollapsed && favoriteResourceCount > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                    {favoriteResourceCount}
+                  </span>
+                )}
               </button>
               <button 
                 onClick={() => { setActiveView('recent'); setIsMobileOpen(false); }}
@@ -481,59 +518,62 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
                 {!isSidebarCollapsed && <span className="truncate">Recently Opened</span>}
               </button>
             </div>
-          </div>
 
-          {/* SECTION 3: Playlists & Categories (with Sub-categories) */}
-          <div className="px-3">
-            <div className={cn("px-1 mb-1.5 flex items-center", isSidebarCollapsed ? "justify-center" : "justify-between")}>
-              {!isSidebarCollapsed && (
-                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                  Playlists & Categories
-                </span>
-              )}
-              <button 
-                onClick={openAddCategoryModal}
-                className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                title="Create New Category / Folder (with custom icon)"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-
-            <div className="space-y-0.5">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={parentCategories.map(c => c.id)}
-                  strategy={verticalListSortingStrategy}
+            {/* NESTED SUB-SECTION: Playlists & Categories under Resources */}
+            <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
+              <div className={cn("px-1 mb-1.5 flex items-center", isSidebarCollapsed ? "justify-center" : "justify-between")}>
+                {!isSidebarCollapsed && (
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    Playlists & Categories
+                  </span>
+                )}
+                <button 
+                  onClick={openAddCategoryModal}
+                  className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  title="Create New Category / Folder (with custom icon)"
                 >
-                  {parentCategories.map(category => (
-                    <SortableCategoryItem 
-                      key={category.id}
-                      category={category}
-                      subcategories={subcategoriesMap[category.id] || []}
-                      activeCategoryId={activeCategoryId}
-                      activeSubcategoryId={activeSubcategoryId}
-                      activeView={activeView}
-                      setActiveCategory={setActiveCategory}
-                      setIsMobileOpen={setIsMobileOpen}
-                      onEditCategory={openEditCategoryModal}
-                      deleteCategory={deleteCategory}
-                      onAddSubcategory={openAddSubcategoryModal}
-                      isSidebarCollapsed={isSidebarCollapsed}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-              
-              {parentCategories.length === 0 && !isSidebarCollapsed && (
-                <div className="px-3 py-3 text-xs text-center text-slate-400">
-                  No categories yet
-                </div>
-              )}
+                  <Plus size={13} />
+                </button>
+              </div>
+
+              <div className="space-y-0.5">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={parentCategories.map(c => c.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {parentCategories.map(category => (
+                      <SortableCategoryItem 
+                        key={category.id}
+                        category={category}
+                        subcategories={subcategoriesMap[category.id] || []}
+                        activeCategoryId={activeCategoryId}
+                        activeSubcategoryId={activeSubcategoryId}
+                        activeView={activeView}
+                        setActiveCategory={setActiveCategory}
+                        setIsMobileOpen={setIsMobileOpen}
+                        onEditCategory={openEditCategoryModal}
+                        deleteCategory={deleteCategory}
+                        onAddSubcategory={openAddSubcategoryModal}
+                        isSidebarCollapsed={isSidebarCollapsed}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+                
+                {parentCategories.length === 0 && !isSidebarCollapsed && (
+                  <div 
+                    onClick={openAddCategoryModal}
+                    className="px-3 py-2.5 text-xs text-center text-slate-400 hover:text-indigo-500 cursor-pointer border border-dashed border-slate-200 dark:border-slate-800 rounded-xl hover:border-indigo-400 transition-all"
+                  >
+                    + Add first category
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

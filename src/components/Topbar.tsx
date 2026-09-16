@@ -48,16 +48,20 @@ export function Topbar({ onMenuClick, onAddBookmark, onAddResource }: TopbarProp
     description = 'Your saved websites and online tools with automatic favicons';
   }
 
-  const categoryResources = activeCategoryId 
-    ? resources.filter(r => r.categoryId === activeCategoryId)
-    : activeView === 'favorites' ? resources.filter(r => r.favorite) 
-    : activeView === 'bookmarks' ? resources.filter(r => r.type === 'Website' || ['Article', 'Bookmark', 'Documentation'].includes(r.type))
-    : resources;
+  const categoryResources = activeView === 'bookmarks'
+    ? resources.filter(r => r.type === 'Website')
+    : activeCategoryId 
+      ? resources.filter(r => r.categoryId === activeCategoryId && r.type !== 'Website')
+      : activeView === 'favorites' 
+        ? resources.filter(r => r.favorite && r.type !== 'Website') 
+        : activeView === 'recent'
+          ? resources.filter(r => r.lastOpenedAt && r.type !== 'Website')
+          : resources.filter(r => r.type !== 'Website');
 
   const total = categoryResources.length;
-  const websites = categoryResources.filter(r => r.type === 'Website' || ['Article', 'Bookmark', 'Documentation'].includes(r.type)).length;
-  const posts = categoryResources.filter(r => r.type === 'Post').length;
-  const videos = categoryResources.filter(r => r.type === 'Video' || r.type.includes('Video') || r.type.includes('Playlist')).length;
+  const websites = resources.filter(r => r.type === 'Website').length;
+  const posts = resources.filter(r => r.type === 'Post').length;
+  const videos = resources.filter(r => r.type === 'Video').length;
 
   return (
     <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-8 py-4 sm:py-5 flex flex-col gap-3.5">
