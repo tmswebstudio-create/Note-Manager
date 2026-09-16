@@ -353,7 +353,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen }: { isMobileOpen: boole
 }
 
 function AuthButton({ isSidebarCollapsed }: { isSidebarCollapsed: boolean }) {
-  const { user, isGuest, signIn, signOut } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   
   if (user || isGuest) {
     return (
@@ -377,19 +377,5 @@ function AuthButton({ isSidebarCollapsed }: { isSidebarCollapsed: boolean }) {
     );
   }
   
-  return (
-    <button 
-      onClick={signIn}
-      className={cn(
-        "flex items-center justify-center py-2 px-3 text-sm font-medium rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors",
-        isSidebarCollapsed ? "w-full" : "w-full gap-2"
-      )}
-      title="Sign In"
-    >
-      <div className="w-5 h-5 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-300 text-xs shrink-0">
-        U
-      </div>
-      {!isSidebarCollapsed && <span>Sign In</span>}
-    </button>
-  );
+  return null; // Not reachable since app forces login page
 }

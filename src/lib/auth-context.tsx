@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
-import { auth, googleAuthProvider } from './firebase.ts';
+import { User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase.ts';
 import { useStore } from '../store/useStore.ts';
 
 interface AuthContextType {
@@ -8,7 +8,8 @@ interface AuthContextType {
   loading: boolean;
   isGuest: boolean;
   authError: string | null;
-  signIn: () => Promise<void>;
+  signIn: (email: string, pass: string) => Promise<void>;
+  signUp: (email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
   clearAuthError: () => void;
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthContextType>({
   isGuest: false,
   authError: null,
   signIn: async () => {},
+  signUp: async () => {},
   signOut: async () => {},
   continueAsGuest: () => {},
   clearAuthError: () => {},
@@ -69,14 +71,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    // Check for redirect result on mount
-    getRedirectResult(auth).catch((error) => {
-      console.error("Error with redirect sign in:", error);
-      if (error.code === 'auth/internal-error') {
-        setAuthError("Google Sign-In is blocked in this preview window. Please open the app in a new tab using the icon in the top right to sign in.");
-      }
-    });
-
     return () => unsubscribe();
   }, [setResources, setCategories]);
 
@@ -106,36 +100,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearTimeout(timeout);
   }, [resources, categories, user, loading]);
 
-  const signIn = async () => {
+  const signIn = async (email: string, pass: string) => {
     try {
       setAuthError(null);
-      await signInWithPopup(auth, googleAuthProvider);
+      await signInWithEmailAndPassword(auth, email, pass);
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.log('Sign in cancelled by user.');
-      } else if (error.code === 'auth/cross-origin-opener-policy-failed' || error.code === 'auth/internal-error') {
-        console.log('Popup failed due to COOP/security restrictions, falling back to redirect...');
-        try {
-          await signInWithRedirect(auth, googleAuthProvider);
-        } catch (redirectError: any) {
-          if (redirectError.code === 'auth/internal-error') {
-            setAuthError("Google Sign-In is blocked in this preview window. Please open the app in a new tab using the icon in the top right to sign in.");
-          } else {
-            setAuthError(redirectError.message);
-          }
-        }
-      } else {
-        console.error('Error signing in with Google', error);
-        try {
-          await signInWithRedirect(auth, googleAuthProvider);
-        } catch (redirectError: any) {
-          if (redirectError.code === 'auth/internal-error') {
-            setAuthError("Google Sign-In is blocked in this preview window. Please open the app in a new tab using the icon in the top right to sign in.");
-          } else {
-            setAuthError(redirectError.message);
-          }
-        }
-      }
+      console.error('Error signing in', error);
+      setAuthError(error.message || "Failed to sign in.");
+    }
+  };
+
+  const signUp = async (email: string, pass: string) => {
+    try {
+      setAuthError(null);
+      await createUserWithEmailAndPassword(auth, email, pass);
+    } catch (error: any) {
+      console.error('Error signing up', error);
+      setAuthError(error.message || "Failed to sign up.");
     }
   };
 
@@ -161,7 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isGuest, authError, signIn, signOut, continueAsGuest, clearAuthError }}>
+    <AuthContext.Provider value={{ user, loading, isGuest, authError, signIn, signUp, signOut, continueAsGuest, clearAuthError }}>
       {children}
     </AuthContext.Provider>
   );
