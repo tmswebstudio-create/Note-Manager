@@ -125,11 +125,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       console.error('Error signing in', error);
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setAuthError("Incorrect email or password. Please try again or sign up if you don't have an account.");
+        setAuthError("Incorrect email or password. Please verify your credentials or create an account.");
       } else if (error.code === 'auth/too-many-requests') {
-        setAuthError("Too many failed login attempts. Please try again later.");
+        setAuthError("Too many failed login attempts. Please wait a moment and try again.");
       } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError("Email/Password sign-in is not enabled in this project. Please use 'Sign in with Google' above.");
+        setAuthError("Email/Password sign-in is not enabled in Firebase. Please enable 'Email/Password' in Firebase Console > Authentication > Sign-in method.");
       } else {
         setAuthError(error.message || "Failed to sign in.");
       }
@@ -143,11 +143,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       console.error('Error signing up', error);
       if (error.code === 'auth/email-already-in-use') {
-        setAuthError("This email is already registered. Please switch to Sign in below.");
+        setAuthError("This email is already registered. Please switch to Sign In.");
       } else if (error.code === 'auth/weak-password') {
         setAuthError("Password is too weak. Please use at least 6 characters.");
       } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError("Email/Password sign-up is not enabled in this project. Please use 'Sign in with Google' above.");
+        setAuthError("Email/Password sign-up is not enabled in Firebase. Please enable 'Email/Password' in Firebase Console > Authentication > Sign-in method.");
       } else {
         setAuthError(error.message || "Failed to sign up.");
       }

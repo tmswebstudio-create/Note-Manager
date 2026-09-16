@@ -1,11 +1,11 @@
 {
-  "projectId": "active-diode-0cf5x",
-  "appId": "1:30118270596:web:4c08335d6110c1f99c94d1",
-  "apiKey": "AIzaSyBiq3uUt3Eu7MB1gzHGOsprFm60--UNTms",
-  "authDomain": "active-diode-0cf5x.firebaseapp.com",
-  "storageBucket": "active-diode-0cf5x.firebasestorage.app",
-  "messagingSenderId": "30118270596",
-  "measurementId": "",
-  "oAuthClientId": "30118270596-23l4j1ulc8pt5jd1nhjor0qjesd4djsa.apps.googleusercontent.com",
+  "projectId": "note-manager-37fbd",
+  "appId": "1:832087782529:web:b41951ad8d5f42d4824980",
+  "apiKey": "AIzaSyAGBMxCs5G7zNcy_VvT2qk_DCHDpkeuF6A",
+  "authDomain": "note-manager-37fbd.firebaseapp.com",
+  "storageBucket": "note-manager-37fbd.firebasestorage.app",
+  "messagingSenderId": "832087782529",
+  "measurementId": "G-5EN9XKG97M",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }
