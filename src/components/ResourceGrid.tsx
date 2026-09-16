@@ -131,7 +131,7 @@ export function ResourceGrid({
   };
 
   return (
-    <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-8 space-y-8 w-full">
       
       {/* ------------------------------------------------------------- */}
       {/* 1. SECTION: PLAYLISTS & CATEGORIES (Shown on All Resources page) */}
@@ -181,7 +181,7 @@ export function ResourceGrid({
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Click here to create your first learning category with custom icon.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
               {parentCategories.map(cat => {
                 const count = learningResources.filter(r => r.categoryId === cat.id).length;
                 const subs = subcategoriesMap[cat.id] || [];
