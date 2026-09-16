@@ -1,28 +1,21 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { useStore } from '../store/useStore';
 import { Resource } from '../types';
-import { X, Loader2, Image as ImageIcon, Link as LinkIcon, AlertCircle, Sparkles, Play, FileText, Layers, FolderTree, Plus } from 'lucide-react';
-import { cn } from './Sidebar';
-import { getAutoThumbnail, normalizeUrl } from '../utils/url-helpers';
+import { X, Loader2, Link as LinkIcon, AlertCircle, Sparkles, Globe, FolderTree, Plus } from 'lucide-react';
+import { getFaviconUrl, getDuckDuckGoFaviconUrl, normalizeUrl } from '../utils/url-helpers';
 
-interface AddResourceModalProps {
+interface AddBookmarkModalProps {
   onClose: () => void;
   editResource?: Resource;
   defaultCategoryId?: string;
   defaultSubcategoryId?: string;
 }
 
-const RESOURCE_TYPES: { type: 'Video' | 'Post'; label: string; icon: any; hint: string }[] = [
-  { type: 'Video', label: 'Video', icon: Play, hint: 'YouTube, Vimeo, Courses' },
-  { type: 'Post', label: 'Post / Article', icon: FileText, hint: 'Medium, Dev.to, Blogs, Docs' },
-];
-
-export function AddResourceModal({ onClose, editResource, defaultCategoryId, defaultSubcategoryId }: AddResourceModalProps) {
+export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, defaultSubcategoryId }: AddBookmarkModalProps) {
   const { addResource, updateResource, categories, activeCategoryId, activeSubcategoryId, addCategory, addSubcategory } = useStore();
   
   const [url, setUrl] = useState(editResource?.url || '');
   const [title, setTitle] = useState(editResource?.title || '');
-  const [type, setType] = useState<'Video' | 'Post'>((editResource?.type === 'Post' ? 'Post' : 'Video'));
   
   // Parent categories (categories with no parentId)
   const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
@@ -38,7 +31,7 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
     if (activeCategoryId) {
       return categories.find(c => c.id === activeCategoryId)?.name || '';
     }
-    return parentCategories.length > 0 ? parentCategories[0].name : 'Resources';
+    return parentCategories.length > 0 ? parentCategories[0].name : 'Websites';
   }, [editResource, defaultCategoryId, activeCategoryId, categories, parentCategories]);
 
   // Initial Subcategory Setup
@@ -58,10 +51,8 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
   const [categoryInput, setCategoryInput] = useState(initialCategoryName);
   const [subcategoryInput, setSubcategoryInput] = useState(initialSubcategoryName);
   const [showSubcategoryField, setShowSubcategoryField] = useState(Boolean(initialSubcategoryName || editResource?.subcategoryId));
-
-  const [coverImage, setCoverImage] = useState(editResource?.coverImage || '');
-  const [description, setDescription] = useState(editResource?.description || '');
   
+  const [faviconUrl, setFaviconUrl] = useState(editResource?.coverImage || '');
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [error, setError] = useState('');
 
@@ -76,22 +67,16 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
     return categories.filter(c => c.parentId === currentSelectedCategory.id);
   }, [categories, currentSelectedCategory]);
 
-  // Auto-detect thumbnail and title when URL changes
+  // Auto-fetch favicon and website title when URL changes
   useEffect(() => {
     if (editResource) return;
     const cleanUrl = normalizeUrl(url);
     if (!cleanUrl) return;
 
-    // Detect Video type automatically for YouTube/Vimeo
-    const isVideo = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be') || cleanUrl.includes('vimeo.com');
-    if (isVideo) {
-      setType('Video');
-    }
-
-    // Instant local thumbnail detection
-    const instantThumb = getAutoThumbnail(cleanUrl);
-    if (instantThumb && !coverImage) {
-      setCoverImage(instantThumb);
+    // Instant local favicon generation
+    const autoFav = getFaviconUrl(cleanUrl, 128);
+    if (autoFav && !faviconUrl) {
+      setFaviconUrl(autoFav);
     }
 
     const debounceTimeout = setTimeout(async () => {
@@ -108,26 +93,22 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
         
         if (res.ok) {
           const data = await res.json();
-          if (data.title && data.title !== 'Website' && data.title !== 'Video') setTitle(data.title);
-          if (data.description) setDescription(data.description);
-          
-          if (data.coverImage) {
-            setCoverImage(data.coverImage);
-          } else if (!coverImage) {
-            const fallback = getAutoThumbnail(cleanUrl);
-            if (fallback) setCoverImage(fallback);
+          if (data.title && data.title !== 'Website') {
+            setTitle(data.title);
+          }
+          if (!faviconUrl) {
+            setFaviconUrl(getFaviconUrl(cleanUrl, 128));
           }
         }
       } catch (err) {
         console.error("Failed to fetch metadata", err);
-        if (!coverImage) {
-          const fallback = getAutoThumbnail(cleanUrl);
-          if (fallback) setCoverImage(fallback);
+        if (!faviconUrl) {
+          setFaviconUrl(getFaviconUrl(cleanUrl, 128));
         }
       } finally {
         setIsLoadingMetadata(false);
       }
-    }, 800);
+    }, 600);
 
     return () => clearTimeout(debounceTimeout);
   }, [url, editResource]);
@@ -166,48 +147,46 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
       }
     }
 
-    // Automatically fetch thumbnail if blank
-    const finalCoverImage = coverImage.trim() || getAutoThumbnail(cleanUrl);
+    // Assign high-resolution favicon
+    const finalFavicon = faviconUrl.trim() || getFaviconUrl(cleanUrl, 128);
 
     if (editResource) {
       updateResource(editResource.id, { 
         url: cleanUrl, 
         title: title.trim(), 
-        type, 
+        type: 'Website', 
         categoryId: finalCategoryId,
         subcategoryId: finalSubcategoryId || null,
-        coverImage: finalCoverImage, 
-        description: description.trim() 
+        coverImage: finalFavicon 
       });
     } else {
       addResource({ 
         url: cleanUrl, 
         title: title.trim(), 
-        type, 
+        type: 'Website', 
         categoryId: finalCategoryId,
         subcategoryId: finalSubcategoryId || null,
-        coverImage: finalCoverImage, 
-        description: description.trim(), 
+        coverImage: finalFavicon, 
         favorite: false 
       });
     }
     onClose();
   };
 
-  const previewCover = coverImage || (url ? getAutoThumbnail(url) : null);
+  const previewIcon = faviconUrl || (url ? getFaviconUrl(url, 128) : null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-full border border-slate-200/80 dark:border-slate-800">
+      <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-full border border-slate-200/80 dark:border-slate-800">
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Layers size={18} />
+              <Globe size={18} />
             </div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              {editResource ? 'Edit Resource' : 'Add Learning Resource'}
+              {editResource ? 'Edit Bookmark' : 'Add Web Bookmark'}
             </h2>
           </div>
           <button 
@@ -226,15 +205,15 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
             </div>
           )}
 
-          <form id="resource-form" onSubmit={handleSubmit} className="space-y-4">
+          <form id="bookmark-form" onSubmit={handleSubmit} className="space-y-4">
             
             {/* URL */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                Resource URL <span className="text-red-500">*</span>
+                Website URL <span className="text-red-500">*</span>
                 {isLoadingMetadata && (
                   <span className="text-[11px] text-indigo-500 font-normal flex items-center gap-1">
-                    <Loader2 size={11} className="animate-spin" /> Fetching details & thumbnail...
+                    <Loader2 size={11} className="animate-spin" /> Fetching favicon & title...
                   </span>
                 )}
               </label>
@@ -242,7 +221,7 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
                 <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
                 <input
                   type="text"
-                  placeholder="e.g. youtube.com/watch?v=... or blog url"
+                  placeholder="e.g. milanote.com or https://milanote.com"
                   value={url}
                   onChange={e => setUrl(e.target.value)}
                   className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
@@ -252,44 +231,14 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
               </div>
             </div>
 
-            {/* Type Selector (Video | Post) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Type
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {RESOURCE_TYPES.map(({ type: t, label, icon: Icon, hint }) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setType(t)}
-                    className={cn(
-                      "flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer",
-                      type === t
-                        ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-600 dark:border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                        : "bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
-                    )}
-                  >
-                    <div className={cn("p-2 rounded-lg", type === t ? "bg-indigo-600 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300")}>
-                      <Icon size={16} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold leading-tight">{label}</div>
-                      <div className="text-[10px] text-slate-400 leading-tight mt-0.5">{hint}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Title */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Title <span className="text-red-500">*</span>
+                Title / Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                placeholder={type === 'Video' ? 'e.g. Complete React & TypeScript Course' : 'e.g. Advanced State Management Guide'}
+                placeholder="e.g. Milanote, Figma, GitHub"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
@@ -297,11 +246,11 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
               />
             </div>
 
-            {/* Playlist / Category */}
+            {/* Main Category */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Playlist / Category <span className="text-red-500">*</span>
+                  Category <span className="text-red-500">*</span>
                 </label>
                 {!showSubcategoryField && (
                   <button
@@ -315,14 +264,14 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
               </div>
               <input
                 type="text"
-                list="resource-parent-categories-datalist"
-                placeholder="e.g. Frontend Masterclass, Backend, AI Research"
+                list="bookmark-parent-categories-datalist"
+                placeholder="e.g. Design, Development, Daily, Tools"
                 value={categoryInput}
                 onChange={e => setCategoryInput(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
                 required
               />
-              <datalist id="resource-parent-categories-datalist">
+              <datalist id="bookmark-parent-categories-datalist">
                 {parentCategories.map(c => <option key={c.id} value={c.name} />)}
               </datalist>
             </div>
@@ -348,13 +297,13 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
                 </div>
                 <input
                   type="text"
-                  list="resource-subcategories-datalist"
-                  placeholder={categoryInput ? `e.g. Under ${categoryInput}: React 19, Hooks, System Design` : "e.g. React, Docker, Python"}
+                  list="bookmark-subcategories-datalist"
+                  placeholder={categoryInput ? `e.g. Under ${categoryInput}: Icons, Inspiration, UI Kits` : "e.g. Icons, UI Kits, Docs"}
                   value={subcategoryInput}
                   onChange={e => setSubcategoryInput(e.target.value)}
                   className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-indigo-200 dark:border-indigo-800/80 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder-slate-400"
                 />
-                <datalist id="resource-subcategories-datalist">
+                <datalist id="bookmark-subcategories-datalist">
                   {availableSubcategories.map(s => <option key={s.id} value={s.name} />)}
                 </datalist>
                 <p className="text-[11px] text-indigo-600/70 dark:text-indigo-400/70">
@@ -363,76 +312,56 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
               </div>
             )}
 
-            {/* Thumbnail */}
-            <div className="space-y-1.5">
+            {/* Auto Favicon Preview */}
+            <div className="space-y-1.5 pt-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Cover Thumbnail
+                  Favicon Preview
                 </label>
-                <div className="flex items-center gap-2">
-                  {url && (
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const cleanUrl = normalizeUrl(url);
-                        if (cleanUrl) {
-                          const thumb = getAutoThumbnail(cleanUrl);
-                          if (thumb) setCoverImage(thumb);
+                {url && (
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const cleanUrl = normalizeUrl(url);
+                      if (cleanUrl) setFaviconUrl(getFaviconUrl(cleanUrl, 128));
+                    }} 
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <Sparkles size={11} /> Re-fetch icon
+                  </button>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
+                <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0 shadow-sm">
+                  {previewIcon ? (
+                    <img 
+                      src={previewIcon} 
+                      alt="Favicon preview" 
+                      className="w-7 h-7 object-contain"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const ddg = getDuckDuckGoFaviconUrl(url);
+                        if (ddg && (e.target as HTMLImageElement).src !== ddg) {
+                          (e.target as HTMLImageElement).src = ddg;
                         }
-                      }} 
-                      className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
-                    >
-                      <Sparkles size={11} /> Auto-fetch thumbnail
-                    </button>
-                  )}
-                  {coverImage && (
-                    <button type="button" onClick={() => setCoverImage('')} className="text-[11px] text-red-500 hover:underline">Clear</button>
+                      }}
+                    />
+                  ) : (
+                    <Globe size={22} className="text-slate-400" />
                   )}
                 </div>
-              </div>
-              
-              <div className="relative">
-                <ImageIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                <input
-                  type="url"
-                  placeholder="Auto-fetched video/post thumbnail if blank"
-                  value={coverImage}
-                  onChange={e => setCoverImage(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                />
-              </div>
-              
-              {previewCover && (
-                <div className="mt-2 w-full aspect-video rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden border border-slate-200 dark:border-slate-700 relative">
-                  <img 
-                    src={previewCover} 
-                    alt="Cover preview" 
-                    className="w-full h-full object-cover" 
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      const fallback = getAutoThumbnail(url);
-                      if (fallback && (e.target as HTMLImageElement).src !== fallback) {
-                        (e.target as HTMLImageElement).src = fallback;
-                      }
-                    }}
-                  />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                    {title || 'Favicon Preview'}
+                  </p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Auto-fetched 128px high-res favicon
+                  </p>
                 </div>
-              )}
+              </div>
             </div>
-            
-            {/* Description */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Notes / Summary (Optional)
-              </label>
-              <textarea
-                rows={2}
-                placeholder="Key takeaways, chapters, or notes..."
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white resize-none"
-              />
-            </div>
+
           </form>
         </div>
         
@@ -447,11 +376,11 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
           </button>
           <button 
             type="submit"
-            form="resource-form"
+            form="bookmark-form"
             className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-1.5"
           >
-            <Layers size={14} />
-            <span>{editResource ? 'Save Resource' : 'Add Resource'}</span>
+            <Globe size={14} />
+            <span>{editResource ? 'Save Bookmark' : 'Add Bookmark'}</span>
           </button>
         </div>
       </div>

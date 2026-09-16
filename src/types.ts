@@ -1,4 +1,4 @@
-export type ResourceType = string;
+export type ResourceType = 'Website' | 'Post' | 'Video';
 
 export interface Resource {
   id: string;
@@ -6,6 +6,7 @@ export interface Resource {
   url: string;
   type: ResourceType;
   categoryId: string;
+  subcategoryId?: string | null;
   coverImage?: string;
   description?: string;
   tags?: string[];
@@ -21,6 +22,7 @@ export interface Resource {
 export interface Category {
   id: string;
   name: string;
+  parentId?: string | null;
   icon?: string;
   color?: string;
   order: number;

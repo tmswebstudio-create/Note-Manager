@@ -9,8 +9,9 @@ export const users = pgTable('users', {
 });
 
 export const categories = pgTable('categories', {
-  id: text('id').primaryKey(), // using text for UUIDs from frontend or we can let DB handle it, but frontend generates UUIDs.
+  id: text('id').primaryKey(),
   userId: integer('user_id').references(() => users.id).notNull(),
+  parentId: text('parent_id'),
   name: text('name').notNull(),
   icon: text('icon'),
   color: text('color'),
@@ -22,6 +23,7 @@ export const resources = pgTable('resources', {
   id: text('id').primaryKey(),
   userId: integer('user_id').references(() => users.id).notNull(),
   categoryId: text('category_id').references(() => categories.id).notNull(),
+  subcategoryId: text('subcategory_id'),
   title: text('title').notNull(),
   url: text('url').notNull(),
   type: text('type').notNull(),
@@ -45,6 +47,14 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   user: one(users, {
     fields: [categories.userId],
     references: [users.id],
+  }),
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: 'subcategories',
+  }),
+  subcategories: many(categories, {
+    relationName: 'subcategories',
   }),
   resources: many(resources),
 }));

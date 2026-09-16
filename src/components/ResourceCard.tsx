@@ -1,32 +1,32 @@
 import { useStore } from '../store/useStore';
 import { Resource } from '../types';
-import { Play, FileText, Globe, Image as ImageIcon, Bookmark, ExternalLink, MoreHorizontal, Star, Trash2, Edit2, CheckCircle2, Circle } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { useState } from 'react';
-import React from 'react';
+import { Play, FileText, Globe, ExternalLink, MoreHorizontal, Star, Trash2, Edit2, CheckCircle2, Circle, Tag } from 'lucide-react';
+import { useState, type Key } from 'react';
 import { cn } from './Sidebar';
+import { getResourceImage } from '../utils/url-helpers';
 
-export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit: (r: Resource) => void, key?: React.Key }) {
-  const { toggleFavorite, deleteResource, toggleComplete } = useStore();
+export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit: (r: Resource) => void, key?: Key }) {
+  const { toggleFavorite, deleteResource, toggleComplete, categories } = useStore();
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  const rawImage = !imageError ? getResourceImage(resource.type, resource.url, resource.coverImage) : '';
+  const displayImage = rawImage && rawImage.trim().length > 0 ? rawImage.trim() : null;
+  const isWebsite = resource.type === 'Website';
+
+  const subcategory = resource.subcategoryId ? categories.find(c => c.id === resource.subcategoryId) : null;
+  const category = categories.find(c => c.id === resource.categoryId);
 
   const getIcon = () => {
     switch (resource.type) {
-      case 'YouTube Video':
-      case 'YouTube Playlist':
-      case 'Course':
-        return <Play size={14} />;
+      case 'Video':
+        return <Play size={13} />;
+      case 'Post':
+        return <FileText size={13} />;
       case 'Website':
-      case 'Article':
-        return <Globe size={14} />;
-      case 'Documentation':
-      case 'PDF':
-        return <FileText size={14} />;
-      case 'Image':
-        return <ImageIcon size={14} />;
       default:
-        return <Bookmark size={14} />;
+        return <Globe size={13} />;
     }
   };
 
@@ -38,18 +38,24 @@ export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit:
   return (
     <div className="group flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:shadow-indigo-500/5 hover:-translate-y-1 transition-all duration-300 relative">
       
-      {/* Cover Image */}
+      {/* Visual / Image Area */}
       <div 
         className="w-full aspect-video bg-slate-100 dark:bg-slate-800 relative cursor-pointer overflow-hidden flex items-center justify-center"
         onClick={handleOpen}
       >
-        {resource.coverImage ? (
-          <img 
-            src={resource.coverImage} 
-            alt={resource.title} 
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            referrerPolicy="no-referrer"
-          />
+        {displayImage ? (
+          <div className={cn("w-full h-full flex items-center justify-center", isWebsite ? "p-6 bg-slate-50 dark:bg-slate-950/60" : "")}>
+            <img 
+              src={displayImage} 
+              alt={resource.title || 'Resource thumbnail'} 
+              className={cn(
+                "transition-transform duration-500 group-hover:scale-105",
+                isWebsite ? "w-16 h-16 object-contain rounded-xl shadow-sm" : "w-full h-full object-cover"
+              )}
+              referrerPolicy="no-referrer"
+              onError={() => setImageError(true)}
+            />
+          </div>
         ) : (
           <div className="text-slate-400 dark:text-slate-600 scale-150 opacity-20">
             {getIcon()}
@@ -63,31 +69,52 @@ export function ResourceCard({ resource, onEdit }: { resource: Resource, onEdit:
           </div>
         </div>
 
-        {/* Completed Badge */}
-        {resource.completed && (
-          <div className="absolute top-3 left-3 bg-green-500/90 backdrop-blur-sm text-white px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1 shadow-sm">
-            <CheckCircle2 size={12} />
-            Completed
-          </div>
-        )}
+        {/* Top Badges */}
+        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
+          {resource.completed && (
+            <div className="bg-green-500/90 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 shadow-sm">
+              <CheckCircle2 size={11} />
+              Completed
+            </div>
+          )}
+          {subcategory && (
+            <div className="bg-slate-900/80 dark:bg-slate-800/90 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 shadow-sm">
+              <Tag size={10} className="text-indigo-400" />
+              <span className="truncate max-w-[120px]">{subcategory.name}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content */}
       <div className={cn("p-4 flex-1 flex flex-col transition-opacity", resource.completed ? "opacity-60 group-hover:opacity-100" : "")}>
         <h3 
-          className={cn("font-semibold text-slate-900 dark:text-white line-clamp-2 leading-snug cursor-pointer group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors", resource.completed ? "line-through" : "")}
+          className={cn("font-semibold text-sm text-slate-900 dark:text-white line-clamp-2 leading-snug cursor-pointer group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors", resource.completed ? "line-through" : "")}
           onClick={handleOpen}
         >
           {resource.title}
         </h3>
         
+        {resource.description && (
+          <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-1.5">
+            {resource.description}
+          </p>
+        )}
+        
         <div className="mt-auto pt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-          <div className="flex items-center gap-1.5 font-medium">
-            {getIcon()}
-            <span>{resource.type}</span>
+          <div className="flex items-center gap-2 font-medium">
+            <span className="flex items-center gap-1">
+              {getIcon()}
+              <span>{resource.type}</span>
+            </span>
+            {category && (
+              <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[90px]">
+                • {category.name}
+              </span>
+            )}
           </div>
           
-          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button 
               onClick={() => toggleComplete(resource.id)}
               className={cn("p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors", resource.completed ? "text-green-500" : "text-slate-400")}

@@ -6,6 +6,7 @@ interface AppState {
   resources: Resource[];
   categories: Category[];
   activeCategoryId: string | null;
+  activeSubcategoryId: string | null;
   activeView: 'home' | 'favorites' | 'recent' | 'category' | 'bookmarks';
   searchQuery: string;
   theme: 'light' | 'dark';
@@ -21,12 +22,14 @@ interface AppState {
   togglePinned: (id: string) => void;
   reorderResources: (startIndex: number, endIndex: number) => void;
   
-  addCategory: (name: string) => string;
+  addCategory: (name: string, parentId?: string | null) => string;
+  addSubcategory: (parentId: string, name: string) => string;
   updateCategory: (id: string, name: string) => void;
   deleteCategory: (id: string) => void;
   reorderCategories: (startIndex: number, endIndex: number) => void;
   
-  setActiveCategory: (id: string | null) => void;
+  setActiveCategory: (id: string | null, subcategoryId?: string | null) => void;
+  setActiveSubcategory: (subcategoryId: string | null) => void;
   setActiveView: (view: 'home' | 'favorites' | 'recent' | 'category' | 'bookmarks') => void;
   setSearchQuery: (query: string) => void;
   toggleTheme: () => void;
@@ -42,6 +45,7 @@ export const useStore = create<AppState>()(
       resources: [],
       categories: [],
       activeCategoryId: null,
+      activeSubcategoryId: null,
       activeView: 'bookmarks',
       searchQuery: '',
       theme: 'light',
@@ -97,13 +101,29 @@ export const useStore = create<AppState>()(
         return { resources: result };
       }),
 
-      addCategory: (name) => {
+      addCategory: (name, parentId = null) => {
         const id = crypto.randomUUID();
         set((state) => {
           const newCategory: Category = {
             id,
-            name,
-            order: state.categories.length,
+            name: name.trim(),
+            parentId: parentId || undefined,
+            order: state.categories.filter(c => c.parentId === (parentId || undefined)).length,
+            createdAt: Date.now()
+          };
+          return { categories: [...state.categories, newCategory] };
+        });
+        return id;
+      },
+
+      addSubcategory: (parentId, name) => {
+        const id = crypto.randomUUID();
+        set((state) => {
+          const newCategory: Category = {
+            id,
+            name: name.trim(),
+            parentId,
+            order: state.categories.filter(c => c.parentId === parentId).length,
             createdAt: Date.now()
           };
           return { categories: [...state.categories, newCategory] };
@@ -113,16 +133,36 @@ export const useStore = create<AppState>()(
 
       updateCategory: (id, name) => set((state) => ({
         categories: state.categories.map(c => 
-          c.id === id ? { ...c, name } : c
+          c.id === id ? { ...c, name: name.trim() } : c
         )
       })),
 
-      deleteCategory: (id) => set((state) => ({
-        categories: state.categories.filter(c => c.id !== id),
-        resources: state.resources.filter(r => r.categoryId !== id),
-        activeCategoryId: state.activeCategoryId === id ? null : state.activeCategoryId,
-        activeView: state.activeCategoryId === id ? 'home' : state.activeView
-      })),
+      deleteCategory: (id) => set((state) => {
+        // Find if this is parent or subcategory
+        const catToDelete = state.categories.find(c => c.id === id);
+        const isParent = !catToDelete?.parentId;
+
+        if (isParent) {
+          // Delete parent category and all its subcategories
+          const subCatIds = state.categories.filter(c => c.parentId === id).map(c => c.id);
+          const allAffectedIds = [id, ...subCatIds];
+
+          return {
+            categories: state.categories.filter(c => c.id !== id && c.parentId !== id),
+            resources: state.resources.filter(r => !allAffectedIds.includes(r.categoryId) && !allAffectedIds.includes(r.subcategoryId || '')),
+            activeCategoryId: state.activeCategoryId === id ? null : state.activeCategoryId,
+            activeSubcategoryId: subCatIds.includes(state.activeSubcategoryId || '') ? null : state.activeSubcategoryId,
+            activeView: state.activeCategoryId === id ? 'home' : state.activeView
+          };
+        } else {
+          // Subcategory delete
+          return {
+            categories: state.categories.filter(c => c.id !== id),
+            resources: state.resources.map(r => r.subcategoryId === id ? { ...r, subcategoryId: undefined } : r),
+            activeSubcategoryId: state.activeSubcategoryId === id ? null : state.activeSubcategoryId,
+          };
+        }
+      }),
 
       reorderCategories: (startIndex, endIndex) => set((state) => {
         const result = Array.from(state.categories);
@@ -131,8 +171,13 @@ export const useStore = create<AppState>()(
         return { categories: result };
       }),
 
-      setActiveCategory: (id) => set({ activeCategoryId: id, activeView: id ? 'category' : 'home' }),
-      setActiveView: (view) => set({ activeView: view, activeCategoryId: null }),
+      setActiveCategory: (id, subcategoryId = null) => set({ 
+        activeCategoryId: id, 
+        activeSubcategoryId: subcategoryId, 
+        activeView: id ? 'category' : 'home' 
+      }),
+      setActiveSubcategory: (subcategoryId) => set({ activeSubcategoryId: subcategoryId }),
+      setActiveView: (view) => set({ activeView: view, activeCategoryId: null, activeSubcategoryId: null }),
       setSearchQuery: (query) => set({ searchQuery: query }),
       toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
       toggleSidebar: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),

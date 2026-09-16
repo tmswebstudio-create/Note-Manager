@@ -1,13 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, type Key, type FormEvent } from 'react';
 import { useStore } from '../store/useStore';
 import { Resource } from '../types';
-import { Globe, Pin, MoreHorizontal, Edit2, Trash2 } from 'lucide-react';
+import { Globe, Pin, MoreHorizontal, Edit2, Trash2, FolderPlus, Plus, Tag } from 'lucide-react';
 import { cn } from './Sidebar';
+import { getFaviconUrl, getDuckDuckGoFaviconUrl } from '../utils/url-helpers';
 
-function BookmarkItem({ item, onEdit }: { item: Resource, onEdit: (r: Resource) => void }) {
+function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdit: (r: Resource) => void, subcategoryName?: string, key?: Key }) {
   const { togglePinned, deleteResource } = useStore();
   const [showMenu, setShowMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [favIndex, setFavIndex] = useState(0);
 
   const domain = useMemo(() => {
     try {
@@ -17,32 +19,53 @@ function BookmarkItem({ item, onEdit }: { item: Resource, onEdit: (r: Resource) 
     }
   }, [item.url]);
 
+  // Try Google 128px favicon first, then DuckDuckGo icon, then cover image if it's an icon, then fallback
+  const faviconSources = useMemo(() => {
+    if (!item.url) return [];
+    return [
+      getFaviconUrl(item.url, 128),
+      getDuckDuckGoFaviconUrl(item.url),
+      item.coverImage && (item.coverImage.includes('favicon') || item.coverImage.includes('icon') || item.coverImage.includes('logo')) ? item.coverImage : '',
+    ].filter(Boolean);
+  }, [item.url, item.coverImage]);
+
+  const currentIconUrl = faviconSources[favIndex] || null;
+
   const handleOpen = () => {
     useStore.getState().updateResource(item.id, { lastOpenedAt: Date.now() });
     window.open(item.url, '_blank', 'noopener,noreferrer');
   };
 
+  const handleImageError = () => {
+    if (favIndex < faviconSources.length - 1) {
+      setFavIndex(prev => prev + 1);
+    } else {
+      setFavIndex(faviconSources.length); // triggers fallback globe icon
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center gap-2 group relative">
+    <div className="flex flex-col items-center gap-1.5 group relative">
       <div 
-        className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center cursor-pointer hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700/50 transition-all overflow-hidden relative shadow-sm"
+        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center cursor-pointer hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-700/50 transition-all overflow-hidden relative shadow-sm hover:-translate-y-0.5"
         onClick={handleOpen}
       >
-        {domain ? (
+        {currentIconUrl ? (
           <img 
-            src={`https://www.google.com/s2/favicons?domain=${domain}&sz=128`} 
-            alt={domain}
-            className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
-            onError={(e) => {
-              (e.target as HTMLElement).style.display = 'none';
-              (e.target as HTMLElement).nextElementSibling?.classList.remove('hidden');
-            }}
+            src={currentIconUrl} 
+            alt={item.title || domain || 'Website'}
+            className="w-10 h-10 sm:w-12 sm:h-12 object-contain rounded-lg p-0.5"
+            referrerPolicy="no-referrer"
+            onError={handleImageError}
           />
-        ) : null}
-        <Globe size={32} className={cn("text-slate-400 dark:text-slate-500", domain ? "hidden" : "")} />
+        ) : (
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-lg">
+            {item.title ? item.title.charAt(0).toUpperCase() : <Globe size={24} />}
+          </div>
+        )}
         
         {/* Overlay actions on hover */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col sm:flex-row items-center justify-center gap-2 backdrop-blur-[2px]">
+        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col sm:flex-row items-center justify-center gap-2 backdrop-blur-[2px] rounded-2xl">
           <button 
             onClick={(e) => { e.stopPropagation(); togglePinned(item.id); }}
             className={cn("p-1.5 rounded-full text-white hover:bg-white/20 transition-colors", item.pinned ? "text-indigo-400" : "")}
@@ -60,10 +83,21 @@ function BookmarkItem({ item, onEdit }: { item: Resource, onEdit: (r: Resource) 
         </div>
       </div>
       
-      <div className="w-full text-center px-1 mt-1" onClick={handleOpen}>
-        <h4 className="font-medium text-sm text-slate-900 dark:text-white truncate cursor-pointer group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" title={item.title}>
+      <div className="w-full text-center px-1" onClick={handleOpen}>
+        <h4 className="font-medium text-xs sm:text-sm text-slate-900 dark:text-white truncate cursor-pointer group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" title={item.title}>
           {item.title}
         </h4>
+        
+        {subcategoryName ? (
+          <div className="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-md text-[10px] font-medium max-w-full truncate" title={`Sub-category: ${subcategoryName}`}>
+            <Tag size={9} className="shrink-0" />
+            <span className="truncate">{subcategoryName}</span>
+          </div>
+        ) : domain ? (
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate" title={domain}>
+            {domain.replace(/^www\./, '')}
+          </p>
+        ) : null}
       </div>
 
       {showMenu && (
@@ -102,12 +136,17 @@ function BookmarkItem({ item, onEdit }: { item: Resource, onEdit: (r: Resource) 
   );
 }
 
-export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void, onAdd?: () => void }) {
-  const { resources, categories, searchQuery } = useStore();
+export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void, onAdd?: (defaultCategoryId?: string, defaultSubcategoryId?: string) => void }) {
+  const { resources, categories, searchQuery, addSubcategory } = useStore();
   
-  // Filter for web-like resources
-  const bookmarkTypes = ['Website', 'Article', 'Bookmark', 'Documentation'];
-  let bookmarks = resources.filter(r => bookmarkTypes.includes(r.type));
+  // Local active subcategory filter per category group
+  const [selectedSubcategories, setSelectedSubcategories] = useState<Record<string, string | null>>({});
+  const [addingSubcatForCategory, setAddingSubcatForCategory] = useState<string | null>(null);
+  const [newSubcatName, setNewSubcatName] = useState('');
+
+  // Filter for website resources
+  const isWebsite = (type: string) => type === 'Website' || ['Article', 'Bookmark', 'Documentation'].includes(type);
+  let bookmarks = resources.filter(r => isWebsite(r.type));
 
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
@@ -119,63 +158,210 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
   }
 
   const pinned = bookmarks.filter(b => b.pinned);
-  const unpinned = bookmarks.filter(b => !b.pinned);
 
-  // Group unpinned by category
-  const grouped = unpinned.reduce((acc, curr) => {
-    const cat = categories.find(c => c.id === curr.categoryId)?.name || 'Uncategorized';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(curr);
-    return acc;
-  }, {} as Record<string, Resource[]>);
+  // Group all bookmarks by parent category
+  const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
+  
+  const grouped = useMemo(() => {
+    const map: Record<string, Resource[]> = {};
+    bookmarks.forEach(curr => {
+      const cat = categories.find(c => c.id === curr.categoryId)?.name || 'Uncategorized';
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(curr);
+    });
+    return map;
+  }, [bookmarks, categories]);
+
+  const handleCreateSubcategory = (e: FormEvent, parentCategoryId: string) => {
+    e.preventDefault();
+    if (newSubcatName.trim()) {
+      addSubcategory(parentCategoryId, newSubcatName.trim());
+      setNewSubcatName('');
+      setAddingSubcatForCategory(null);
+    }
+  };
 
   if (bookmarks.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400">
         <Globe size={48} className="mb-4 opacity-20" />
-        <p>No web bookmarks found.</p>
-        <p className="text-sm mt-1 opacity-70 mb-4">Add a website or article to see it here.</p>
+        <p className="font-medium text-slate-700 dark:text-slate-300">No web bookmarks found.</p>
+        <p className="text-xs mt-1 opacity-70 mb-4">Add your first website or tool with sub-categories.</p>
         {onAdd && (
           <button 
-            onClick={onAdd} 
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-full shadow-sm shadow-indigo-600/20 transition-all active:scale-95"
+            onClick={() => onAdd()} 
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-full shadow-sm shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-1.5"
           >
-            Add Web Bookmark
+            <Plus size={14} />
+            <span>Add Web Bookmark</span>
           </button>
         )}
       </div>
     );
   }
 
+  const groupedEntries: [string, Resource[]][] = Object.entries(grouped);
+
   return (
-    <div className="p-4 sm:p-8 space-y-8 pb-32">
+    <div className="p-4 sm:p-8 space-y-10 pb-32">
+      
+      {/* 1. Pinned Section */}
       {pinned.length > 0 && (
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
-            <Pin size={18} className="text-indigo-500 fill-indigo-500" /> Pinned
-          </h2>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-8 gap-x-4">
-            {pinned.map(b => <BookmarkItem key={b.id} item={b} onEdit={onEdit} />)}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Pin size={18} className="text-indigo-500 fill-indigo-500" /> Pinned Quick Access
+            </h2>
+            <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+              {pinned.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4">
+            {pinned.map(b => {
+              const subName = b.subcategoryId ? categories.find(c => c.id === b.subcategoryId)?.name : undefined;
+              return <BookmarkItem key={b.id} item={b} onEdit={onEdit} subcategoryName={subName} />;
+            })}
           </div>
         </div>
       )}
 
-      {Object.entries(grouped)
+      {/* 2. Main Category Groups with Subcategory Filters & Badges */}
+      {groupedEntries
         .sort(([catA], [catB]) => catA.localeCompare(catB))
-        .map(([category, items]) => (
-        <div key={category}>
-          <div className="flex items-center gap-3 mb-6">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">{category}</h2>
-            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800"></div>
-            <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-              {items.length}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-8 gap-x-4">
-            {items.map(b => <BookmarkItem key={b.id} item={b} onEdit={onEdit} />)}
-          </div>
-        </div>
-      ))}
+        .map(([categoryName, items]) => {
+          const categoryObj = parentCategories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+          const categoryId = categoryObj?.id;
+          const subcategories = categoryId ? categories.filter(c => c.parentId === categoryId) : [];
+          
+          const activeSubId = categoryId ? selectedSubcategories[categoryId] || null : null;
+          
+          // Filter items by subcategory if a subcategory is selected
+          const displayItems = activeSubId 
+            ? items.filter(i => i.subcategoryId === activeSubId)
+            : items;
+
+          return (
+            <div key={categoryName} className="space-y-4">
+              
+              {/* Category Header Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                    {categoryName}
+                  </h2>
+                  <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                    {items.length}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {categoryId && (
+                    <button
+                      onClick={() => {
+                        setAddingSubcatForCategory(addingSubcatForCategory === categoryId ? null : categoryId);
+                        setNewSubcatName('');
+                      }}
+                      className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg flex items-center gap-1 transition-colors"
+                      title="Add sub-category to this folder"
+                    >
+                      <FolderPlus size={13} />
+                      <span className="hidden sm:inline">Add Sub-category</span>
+                    </button>
+                  )}
+                  {onAdd && (
+                    <button
+                      onClick={() => onAdd(categoryId, activeSubId || undefined)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title={`Add bookmark to ${categoryName}`}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Inline Sub-category Creation form */}
+              {addingSubcatForCategory === categoryId && categoryId && (
+                <form 
+                  onSubmit={(e) => handleCreateSubcategory(e, categoryId)}
+                  className="flex items-center gap-2 p-2 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl animate-in fade-in"
+                >
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder={`New sub-category for ${categoryName}...`}
+                    value={newSubcatName}
+                    onChange={(e) => setNewSubcatName(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm"
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddingSubcatForCategory(null)}
+                    className="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
+
+              {/* Sub-category Filter Tabs */}
+              {subcategories.length > 0 && categoryId && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <button
+                    onClick={() => setSelectedSubcategories(prev => ({ ...prev, [categoryId]: null }))}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-xs font-medium transition-colors",
+                      activeSubId === null
+                        ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                    )}
+                  >
+                    All ({items.length})
+                  </button>
+
+                  {subcategories.map(sub => {
+                    const count = items.filter(i => i.subcategoryId === sub.id).length;
+                    const isSelected = activeSubId === sub.id;
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => setSelectedSubcategories(prev => ({ 
+                          ...prev, 
+                          [categoryId]: isSelected ? null : sub.id 
+                        }))}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1",
+                          isSelected
+                            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        )}
+                      >
+                        <span>{sub.name}</span>
+                        <span className={cn("text-[10px] px-1 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Bookmark Grid */}
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-y-6 gap-x-4">
+                {displayItems.map(b => {
+                  const subName = b.subcategoryId ? categories.find(c => c.id === b.subcategoryId)?.name : undefined;
+                  return <BookmarkItem key={b.id} item={b} onEdit={onEdit} subcategoryName={subName} />;
+                })}
+              </div>
+            </div>
+          );
+        })}
     </div>
   );
 }
