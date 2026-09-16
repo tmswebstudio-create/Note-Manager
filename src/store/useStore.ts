@@ -22,9 +22,9 @@ interface AppState {
   togglePinned: (id: string) => void;
   reorderResources: (startIndex: number, endIndex: number) => void;
   
-  addCategory: (name: string, parentId?: string | null, icon?: string) => string;
-  addSubcategory: (parentId: string, name: string, icon?: string) => string;
-  updateCategory: (id: string, updates: string | { name?: string; icon?: string }, icon?: string) => void;
+  addCategory: (name: string, parentId?: string | null, icon?: string, type?: 'resource' | 'bookmark') => string;
+  addSubcategory: (parentId: string, name: string, icon?: string, type?: 'resource' | 'bookmark') => string;
+  updateCategory: (id: string, updates: string | { name?: string; icon?: string; type?: 'resource' | 'bookmark' }, icon?: string) => void;
   deleteCategory: (id: string) => void;
   reorderCategories: (startIndex: number, endIndex: number) => void;
   
@@ -101,14 +101,17 @@ export const useStore = create<AppState>()(
         return { resources: result };
       }),
 
-      addCategory: (name, parentId = null, icon) => {
+      addCategory: (name, parentId = null, icon, type = 'resource') => {
         const id = crypto.randomUUID();
         set((state) => {
+          const parent = parentId ? state.categories.find(c => c.id === parentId) : null;
+          const effectiveType = type || parent?.type || 'resource';
           const newCategory: Category = {
             id,
             name: name.trim(),
             parentId: parentId || undefined,
             icon: icon?.trim() || undefined,
+            type: effectiveType,
             order: state.categories.filter(c => c.parentId === (parentId || undefined)).length,
             createdAt: Date.now()
           };
@@ -117,14 +120,17 @@ export const useStore = create<AppState>()(
         return id;
       },
 
-      addSubcategory: (parentId, name, icon) => {
+      addSubcategory: (parentId, name, icon, type) => {
         const id = crypto.randomUUID();
         set((state) => {
+          const parent = state.categories.find(c => c.id === parentId);
+          const effectiveType = type || parent?.type || 'resource';
           const newCategory: Category = {
             id,
             name: name.trim(),
             parentId,
             icon: icon?.trim() || undefined,
+            type: effectiveType,
             order: state.categories.filter(c => c.parentId === parentId).length,
             createdAt: Date.now()
           };
@@ -146,7 +152,8 @@ export const useStore = create<AppState>()(
           return {
             ...c,
             ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
-            ...(updates.icon !== undefined ? { icon: updates.icon.trim() || undefined } : {})
+            ...(updates.icon !== undefined ? { icon: updates.icon.trim() || undefined } : {}),
+            ...(updates.type !== undefined ? { type: updates.type } : {})
           };
         })
       })),

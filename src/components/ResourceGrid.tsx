@@ -9,6 +9,7 @@ import {
 import { cn } from './Sidebar';
 import { CategoryIcon } from './CategoryIcon';
 import { CategoryModal } from './CategoryModal';
+import { isResourceCategory } from '../utils/category-helpers';
 
 export function ResourceGrid({ 
   onEdit, 
@@ -35,10 +36,12 @@ export function ResourceGrid({
     editingCategory?: Category | null;
     parentId?: string | null;
     parentName?: string;
+    categoryType?: 'resource' | 'bookmark';
   }>({
     isOpen: false,
     editingCategory: null,
     parentId: null,
+    categoryType: 'resource',
   });
 
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'Video' | 'Post'>('ALL');
@@ -49,22 +52,22 @@ export function ResourceGrid({
     return resources.filter(r => r.type !== 'Website');
   }, [resources]);
 
-  // Parent categories (no parentId)
+  // Parent categories strictly for resources/playlists (excluding bookmark categories)
   const parentCategories = useMemo(() => {
-    return categories.filter(c => !c.parentId);
-  }, [categories]);
+    return categories.filter(c => !c.parentId && isResourceCategory(c, categories, resources));
+  }, [categories, resources]);
 
-  // Subcategories map
+  // Subcategories map strictly for resources/playlists (excluding bookmark subcategories)
   const subcategoriesMap = useMemo(() => {
     const map: Record<string, Category[]> = {};
     categories.forEach(c => {
-      if (c.parentId) {
+      if (c.parentId && isResourceCategory(c, categories, resources)) {
         if (!map[c.parentId]) map[c.parentId] = [];
         map[c.parentId].push(c);
       }
     });
     return map;
-  }, [categories]);
+  }, [categories, resources]);
 
   const activeCategory = activeCategoryId ? categories.find(c => c.id === activeCategoryId) : null;
   const currentSubcategories = activeCategoryId ? (subcategoriesMap[activeCategoryId] || []) : [];
@@ -110,6 +113,7 @@ export function ResourceGrid({
       isOpen: true,
       editingCategory: null,
       parentId: null,
+      categoryType: 'resource',
     });
   };
 
@@ -119,6 +123,7 @@ export function ResourceGrid({
       editingCategory: null,
       parentId,
       parentName,
+      categoryType: 'resource',
     });
   };
 
@@ -127,6 +132,7 @@ export function ResourceGrid({
       isOpen: true,
       editingCategory: cat,
       parentId: cat.parentId || null,
+      categoryType: 'resource',
     });
   };
 
@@ -521,6 +527,7 @@ export function ResourceGrid({
         editingCategory={categoryModalConfig.editingCategory}
         parentId={categoryModalConfig.parentId}
         parentName={categoryModalConfig.parentName}
+        categoryType={categoryModalConfig.categoryType || 'resource'}
       />
     </div>
   );

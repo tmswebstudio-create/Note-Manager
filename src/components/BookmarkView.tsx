@@ -148,10 +148,12 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
     editingCategory?: Category | null;
     parentId?: string | null;
     parentName?: string;
+    categoryType?: 'resource' | 'bookmark';
   }>({
     isOpen: false,
     editingCategory: null,
     parentId: null,
+    categoryType: 'bookmark',
   });
 
   // Filter strictly for website bookmarks
@@ -270,6 +272,7 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                           editingCategory: null,
                           parentId: categoryId,
                           parentName: categoryName,
+                          categoryType: 'bookmark',
                         });
                       }}
                       className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg flex items-center gap-1 transition-colors"
@@ -286,6 +289,7 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                           isOpen: true,
                           editingCategory: categoryObj,
                           parentId: null,
+                          categoryType: 'bookmark',
                         });
                       }}
                       className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -373,6 +377,7 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
         editingCategory={categoryModalConfig.editingCategory}
         parentId={categoryModalConfig.parentId}
         parentName={categoryModalConfig.parentName}
+        categoryType={categoryModalConfig.categoryType || 'bookmark'}
       />
     </div>
   );

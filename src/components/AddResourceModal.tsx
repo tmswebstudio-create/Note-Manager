@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from './Sidebar';
 import { getAutoThumbnail, normalizeUrl, fetchUrlMetadata, MetadataResult } from '../utils/url-helpers';
+import { isResourceCategory } from '../utils/category-helpers';
 
 interface AddResourceModalProps {
   onClose: () => void;
@@ -21,14 +22,16 @@ const RESOURCE_TYPES: { type: 'Video' | 'Post'; label: string; icon: any; hint: 
 ];
 
 export function AddResourceModal({ onClose, editResource, defaultCategoryId, defaultSubcategoryId }: AddResourceModalProps) {
-  const { addResource, updateResource, categories, activeCategoryId, activeSubcategoryId, addCategory, addSubcategory } = useStore();
+  const { resources, addResource, updateResource, categories, activeCategoryId, activeSubcategoryId, addCategory, addSubcategory } = useStore();
   
   const [url, setUrl] = useState(editResource?.url || '');
   const [title, setTitle] = useState(editResource?.title || '');
   const [type, setType] = useState<'Video' | 'Post'>((editResource?.type === 'Post' ? 'Post' : 'Video'));
   
-  // Parent categories (categories with no parentId)
-  const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
+  // Parent categories (strictly resource categories)
+  const parentCategories = useMemo(() => {
+    return categories.filter(c => !c.parentId && isResourceCategory(c, categories, resources));
+  }, [categories, resources]);
 
   // Initial Category Setup
   const initialCategoryName = useMemo(() => {
@@ -181,7 +184,7 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
     if (existingCat) {
       finalCategoryId = existingCat.id;
     } else {
-      finalCategoryId = addCategory(cleanCatName);
+      finalCategoryId = addCategory(cleanCatName, null, undefined, 'resource');
     }
 
     // 2. Resolve or Create Subcategory (if provided)
@@ -195,7 +198,7 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
       if (existingSub) {
         finalSubcategoryId = existingSub.id;
       } else {
-        finalSubcategoryId = addSubcategory(finalCategoryId, cleanSubcatName);
+        finalSubcategoryId = addSubcategory(finalCategoryId, cleanSubcatName, undefined, 'resource');
       }
     }
 

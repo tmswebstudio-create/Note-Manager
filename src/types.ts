@@ -27,4 +27,5 @@ export interface Category {
   color?: string;
   order: number;
   createdAt: number;
+  type?: 'resource' | 'bookmark';
 }

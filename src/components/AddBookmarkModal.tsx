@@ -6,6 +6,7 @@ import {
   Globe, FolderTree, Plus, CheckCircle2, RefreshCw 
 } from 'lucide-react';
 import { getFaviconUrl, getDuckDuckGoFaviconUrl, normalizeUrl, fetchUrlMetadata } from '../utils/url-helpers';
+import { isBookmarkCategory } from '../utils/category-helpers';
 
 interface AddBookmarkModalProps {
   onClose: () => void;
@@ -15,13 +16,15 @@ interface AddBookmarkModalProps {
 }
 
 export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, defaultSubcategoryId }: AddBookmarkModalProps) {
-  const { addResource, updateResource, categories, activeCategoryId, activeSubcategoryId, addCategory, addSubcategory } = useStore();
+  const { resources, addResource, updateResource, categories, activeCategoryId, activeSubcategoryId, addCategory, addSubcategory } = useStore();
   
   const [url, setUrl] = useState(editResource?.url || '');
   const [title, setTitle] = useState(editResource?.title || '');
   
-  // Parent categories (categories with no parentId)
-  const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
+  // Parent categories (strictly bookmark categories)
+  const parentCategories = useMemo(() => {
+    return categories.filter(c => !c.parentId && isBookmarkCategory(c, categories, resources));
+  }, [categories, resources]);
 
   // Initial Category Setup
   const initialCategoryName = useMemo(() => {
@@ -150,7 +153,7 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
     if (existingCat) {
       finalCategoryId = existingCat.id;
     } else {
-      finalCategoryId = addCategory(cleanCatName);
+      finalCategoryId = addCategory(cleanCatName, null, undefined, 'bookmark');
     }
 
     // 2. Resolve or Create Subcategory (if provided)
@@ -164,7 +167,7 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
       if (existingSub) {
         finalSubcategoryId = existingSub.id;
       } else {
-        finalSubcategoryId = addSubcategory(finalCategoryId, cleanSubcatName);
+        finalSubcategoryId = addSubcategory(finalCategoryId, cleanSubcatName, undefined, 'bookmark');
       }
     }
 

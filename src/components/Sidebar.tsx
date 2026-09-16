@@ -27,6 +27,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 import { CategoryModal } from './CategoryModal';
+import { isResourceCategory } from '../utils/category-helpers';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -280,11 +281,13 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
     editingCategory?: Category | null;
     parentId?: string | null;
     parentName?: string;
+    categoryType?: 'resource' | 'bookmark';
   }>({
     isOpen: false,
     editingCategory: null,
     parentId: null,
     parentName: undefined,
+    categoryType: 'resource',
   });
 
   const sensors = useSensors(
@@ -303,19 +306,21 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
   const learningResourceCount = useMemo(() => resources.filter(r => r.type !== 'Website').length, [resources]);
   const favoriteResourceCount = useMemo(() => resources.filter(r => r.type !== 'Website' && r.favorite).length, [resources]);
 
-  // Separate parent categories from subcategories
-  const parentCategories = useMemo(() => categories.filter(c => !c.parentId), [categories]);
+  // Separate parent categories from subcategories (strictly for learning resources, excluding bookmarks)
+  const parentCategories = useMemo(() => {
+    return categories.filter(c => !c.parentId && isResourceCategory(c, categories, resources));
+  }, [categories, resources]);
   
   const subcategoriesMap = useMemo(() => {
     const map: Record<string, Category[]> = {};
     categories.forEach(c => {
-      if (c.parentId) {
+      if (c.parentId && isResourceCategory(c, categories, resources)) {
         if (!map[c.parentId]) map[c.parentId] = [];
         map[c.parentId].push(c);
       }
     });
     return map;
-  }, [categories]);
+  }, [categories, resources]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -333,6 +338,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
       isOpen: true,
       editingCategory: null,
       parentId: null,
+      categoryType: 'resource',
     });
   };
 
@@ -343,6 +349,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
       editingCategory: null,
       parentId,
       parentName,
+      categoryType: 'resource',
     });
   };
 
@@ -351,6 +358,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
       isOpen: true,
       editingCategory: cat,
       parentId: cat.parentId || null,
+      categoryType: 'resource',
     });
   };
 
@@ -602,6 +610,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
         editingCategory={categoryModalConfig.editingCategory}
         parentId={categoryModalConfig.parentId}
         parentName={categoryModalConfig.parentName}
+        categoryType={categoryModalConfig.categoryType || 'resource'}
       />
     </>
   );

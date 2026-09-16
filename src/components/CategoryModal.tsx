@@ -17,6 +17,7 @@ interface CategoryModalProps {
   // If creating a subcategory under a parent:
   parentId?: string | null;
   parentName?: string;
+  categoryType?: 'resource' | 'bookmark';
 }
 
 export function CategoryModal({
@@ -25,6 +26,7 @@ export function CategoryModal({
   editingCategory,
   parentId,
   parentName,
+  categoryType = 'resource'
 }: CategoryModalProps) {
   const { addCategory, addSubcategory, updateCategory, categories } = useStore();
 
@@ -83,9 +85,9 @@ export function CategoryModal({
         icon: cleanIcon || undefined,
       });
     } else if (isSubcategory && parentId) {
-      addSubcategory(parentId, cleanName, cleanIcon || undefined);
+      addSubcategory(parentId, cleanName, cleanIcon || undefined, categoryType);
     } else {
-      addCategory(cleanName, null, cleanIcon || undefined);
+      addCategory(cleanName, null, cleanIcon || undefined, categoryType);
     }
 
     onClose();
