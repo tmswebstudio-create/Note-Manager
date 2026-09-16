@@ -22,9 +22,9 @@ interface AppState {
   togglePinned: (id: string) => void;
   reorderResources: (startIndex: number, endIndex: number) => void;
   
-  addCategory: (name: string, parentId?: string | null) => string;
-  addSubcategory: (parentId: string, name: string) => string;
-  updateCategory: (id: string, name: string) => void;
+  addCategory: (name: string, parentId?: string | null, icon?: string) => string;
+  addSubcategory: (parentId: string, name: string, icon?: string) => string;
+  updateCategory: (id: string, updates: string | { name?: string; icon?: string }, icon?: string) => void;
   deleteCategory: (id: string) => void;
   reorderCategories: (startIndex: number, endIndex: number) => void;
   
@@ -101,13 +101,14 @@ export const useStore = create<AppState>()(
         return { resources: result };
       }),
 
-      addCategory: (name, parentId = null) => {
+      addCategory: (name, parentId = null, icon) => {
         const id = crypto.randomUUID();
         set((state) => {
           const newCategory: Category = {
             id,
             name: name.trim(),
             parentId: parentId || undefined,
+            icon: icon?.trim() || undefined,
             order: state.categories.filter(c => c.parentId === (parentId || undefined)).length,
             createdAt: Date.now()
           };
@@ -116,13 +117,14 @@ export const useStore = create<AppState>()(
         return id;
       },
 
-      addSubcategory: (parentId, name) => {
+      addSubcategory: (parentId, name, icon) => {
         const id = crypto.randomUUID();
         set((state) => {
           const newCategory: Category = {
             id,
             name: name.trim(),
             parentId,
+            icon: icon?.trim() || undefined,
             order: state.categories.filter(c => c.parentId === parentId).length,
             createdAt: Date.now()
           };
@@ -131,10 +133,22 @@ export const useStore = create<AppState>()(
         return id;
       },
 
-      updateCategory: (id, name) => set((state) => ({
-        categories: state.categories.map(c => 
-          c.id === id ? { ...c, name: name.trim() } : c
-        )
+      updateCategory: (id, updates, iconParam) => set((state) => ({
+        categories: state.categories.map(c => {
+          if (c.id !== id) return c;
+          if (typeof updates === 'string') {
+            return { 
+              ...c, 
+              name: updates.trim(),
+              ...(iconParam !== undefined ? { icon: iconParam.trim() || undefined } : {})
+            };
+          }
+          return {
+            ...c,
+            ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
+            ...(updates.icon !== undefined ? { icon: updates.icon.trim() || undefined } : {})
+          };
+        })
       })),
 
       deleteCategory: (id) => set((state) => {

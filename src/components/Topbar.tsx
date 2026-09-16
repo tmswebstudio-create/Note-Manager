@@ -1,5 +1,7 @@
 import { useStore } from '../store/useStore';
-import { Search, Plus, Menu, Globe, Layers } from 'lucide-react';
+import { useAuth } from '../lib/auth-context';
+import { Search, Globe, Layers, Menu } from 'lucide-react';
+import { CategoryIcon } from './CategoryIcon';
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -8,17 +10,22 @@ interface TopbarProps {
 }
 
 export function Topbar({ onMenuClick, onAddBookmark, onAddResource }: TopbarProps) {
-  const { activeView, activeCategoryId, categories, searchQuery, setSearchQuery, resources, userName } = useStore();
+  const { activeView, activeCategoryId, activeSubcategoryId, categories, searchQuery, setSearchQuery, resources, userName } = useStore();
+  const { user, isGuest } = useAuth();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
   };
+
+  const effectiveName = user?.displayName?.trim() || (userName !== 'Guest' ? userName : null) || (user?.email ? user.email.split('@')[0] : (isGuest ? 'Guest' : 'User'));
 
   let title = 'All Resources';
   let description = 'Manage your complete learning and resource library';
+  let activeCategoryObj = activeCategoryId ? categories.find(c => c.id === activeCategoryId) : null;
+  let activeSubcategoryObj = activeSubcategoryId ? categories.find(c => c.id === activeSubcategoryId) : null;
 
   if (activeView === 'favorites') {
     title = 'Favorites';
@@ -27,10 +34,14 @@ export function Topbar({ onMenuClick, onAddBookmark, onAddResource }: TopbarProp
     title = 'Recently Opened';
     description = 'Pick up where you left off';
   } else if (activeView === 'category' && activeCategoryId) {
-    const cat = categories.find(c => c.id === activeCategoryId);
-    if (cat) {
-      title = cat.name;
-      description = `Your ${cat.name.toLowerCase()} resources`;
+    if (activeCategoryObj) {
+      if (activeSubcategoryObj) {
+        title = `${activeCategoryObj.name} / ${activeSubcategoryObj.name}`;
+        description = `Resources in ${activeSubcategoryObj.name}`;
+      } else {
+        title = activeCategoryObj.name;
+        description = `Your ${activeCategoryObj.name.toLowerCase()} resources`;
+      }
     }
   } else if (activeView === 'bookmarks') {
     title = 'Web Bookmarks';
@@ -59,16 +70,26 @@ export function Topbar({ onMenuClick, onAddBookmark, onAddResource }: TopbarProp
             <Menu size={20} />
           </button>
           
-          <div>
-            <div className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider hidden sm:block">
-              {activeView === 'category' ? `Playlists / ${title}` : activeView === 'bookmarks' ? 'Bookmarks' : `Library / ${title}`}
+          <div className="flex items-center gap-3">
+            {activeView === 'category' && activeCategoryObj && (
+              <CategoryIcon 
+                icon={activeSubcategoryObj?.icon || activeCategoryObj.icon} 
+                name={activeSubcategoryObj?.name || activeCategoryObj.name} 
+                isSubcategory={!!activeSubcategoryObj} 
+                size="lg" 
+              />
+            )}
+            <div>
+              <div className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider hidden sm:block">
+                {activeView === 'category' ? `Playlists / ${title}` : activeView === 'bookmarks' ? 'Bookmarks' : `Library / ${title}`}
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+                {title}
+              </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
+                {description}
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white leading-tight">
-              {title}
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-              {description}
-            </p>
           </div>
         </div>
 
@@ -108,11 +129,22 @@ export function Topbar({ onMenuClick, onAddBookmark, onAddResource }: TopbarProp
           <div className="hidden lg:flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-800 ml-1">
             <div className="text-right hidden xl:block">
               <div className="text-[10px] font-medium text-slate-400">{getGreeting()}</div>
-              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[120px]">{userName}</div>
+              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[120px]" title={effectiveName}>
+                {effectiveName}
+              </div>
             </div>
-            <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold text-xs uppercase cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all">
-              {userName.charAt(0)}
-            </div>
+            {user?.photoURL ? (
+              <img 
+                src={user.photoURL} 
+                alt={effectiveName} 
+                className="w-8 h-8 rounded-full object-cover ring-2 ring-indigo-500/20 shadow-sm shrink-0"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-700 dark:text-indigo-300 font-bold text-xs uppercase cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all shrink-0">
+                {effectiveName ? effectiveName.charAt(0).toUpperCase() : 'U'}
+              </div>
+            )}
           </div>
         </div>
       </div>

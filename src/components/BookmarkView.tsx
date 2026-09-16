@@ -1,9 +1,11 @@
 import { useState, useMemo, type Key, type FormEvent } from 'react';
 import { useStore } from '../store/useStore';
-import { Resource } from '../types';
+import { Resource, Category } from '../types';
 import { Globe, Pin, MoreHorizontal, Edit2, Trash2, FolderPlus, Plus, Tag } from 'lucide-react';
 import { cn } from './Sidebar';
 import { getFaviconUrl, getDuckDuckGoFaviconUrl } from '../utils/url-helpers';
+import { CategoryIcon } from './CategoryIcon';
+import { CategoryModal } from './CategoryModal';
 
 function BookmarkItem({ item, onEdit, subcategoryName }: { item: Resource, onEdit: (r: Resource) => void, subcategoryName?: string, key?: Key }) {
   const { togglePinned, deleteResource } = useStore();
@@ -141,8 +143,16 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
   
   // Local active subcategory filter per category group
   const [selectedSubcategories, setSelectedSubcategories] = useState<Record<string, string | null>>({});
-  const [addingSubcatForCategory, setAddingSubcatForCategory] = useState<string | null>(null);
-  const [newSubcatName, setNewSubcatName] = useState('');
+  const [categoryModalConfig, setCategoryModalConfig] = useState<{
+    isOpen: boolean;
+    editingCategory?: Category | null;
+    parentId?: string | null;
+    parentName?: string;
+  }>({
+    isOpen: false,
+    editingCategory: null,
+    parentId: null,
+  });
 
   // Filter for website resources
   const isWebsite = (type: string) => type === 'Website' || ['Article', 'Bookmark', 'Documentation'].includes(type);
@@ -171,15 +181,6 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
     });
     return map;
   }, [bookmarks, categories]);
-
-  const handleCreateSubcategory = (e: FormEvent, parentCategoryId: string) => {
-    e.preventDefault();
-    if (newSubcatName.trim()) {
-      addSubcategory(parentCategoryId, newSubcatName.trim());
-      setNewSubcatName('');
-      setAddingSubcatForCategory(null);
-    }
-  };
 
   if (bookmarks.length === 0) {
     return (
@@ -246,6 +247,12 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
               {/* Category Header Bar */}
               <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-3">
+                  <CategoryIcon 
+                    icon={categoryObj?.icon} 
+                    name={categoryName} 
+                    isSubcategory={false} 
+                    size="md" 
+                  />
                   <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
                     {categoryName}
                   </h2>
@@ -258,14 +265,33 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                   {categoryId && (
                     <button
                       onClick={() => {
-                        setAddingSubcatForCategory(addingSubcatForCategory === categoryId ? null : categoryId);
-                        setNewSubcatName('');
+                        setCategoryModalConfig({
+                          isOpen: true,
+                          editingCategory: null,
+                          parentId: categoryId,
+                          parentName: categoryName,
+                        });
                       }}
                       className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg flex items-center gap-1 transition-colors"
-                      title="Add sub-category to this folder"
+                      title="Add sub-category (with icon) to this folder"
                     >
                       <FolderPlus size={13} />
                       <span className="hidden sm:inline">Add Sub-category</span>
+                    </button>
+                  )}
+                  {categoryObj && (
+                    <button
+                      onClick={() => {
+                        setCategoryModalConfig({
+                          isOpen: true,
+                          editingCategory: categoryObj,
+                          parentId: null,
+                        });
+                      }}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title={`Edit ${categoryName} icon & name`}
+                    >
+                      <Edit2 size={14} />
                     </button>
                   )}
                   {onAdd && (
@@ -279,36 +305,6 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                   )}
                 </div>
               </div>
-
-              {/* Inline Sub-category Creation form */}
-              {addingSubcatForCategory === categoryId && categoryId && (
-                <form 
-                  onSubmit={(e) => handleCreateSubcategory(e, categoryId)}
-                  className="flex items-center gap-2 p-2 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl animate-in fade-in"
-                >
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder={`New sub-category for ${categoryName}...`}
-                    value={newSubcatName}
-                    onChange={(e) => setNewSubcatName(e.target.value)}
-                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm"
-                  >
-                    Create
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddingSubcatForCategory(null)}
-                    className="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  >
-                    Cancel
-                  </button>
-                </form>
-              )}
 
               {/* Sub-category Filter Tabs */}
               {subcategories.length > 0 && categoryId && (
@@ -336,12 +332,19 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                           [categoryId]: isSelected ? null : sub.id 
                         }))}
                         className={cn(
-                          "px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1",
+                          "px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5",
                           isSelected
                             ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
                             : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                         )}
                       >
+                        <CategoryIcon 
+                          icon={sub.icon} 
+                          name={sub.name} 
+                          isSubcategory={true} 
+                          size="xs" 
+                          isActive={isSelected}
+                        />
                         <span>{sub.name}</span>
                         <span className={cn("text-[10px] px-1 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
                           {count}
@@ -362,6 +365,15 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
             </div>
           );
         })}
+
+      {/* Category/Subcategory Modal */}
+      <CategoryModal
+        isOpen={categoryModalConfig.isOpen}
+        onClose={() => setCategoryModalConfig({ isOpen: false, editingCategory: null, parentId: null })}
+        editingCategory={categoryModalConfig.editingCategory}
+        parentId={categoryModalConfig.parentId}
+        parentName={categoryModalConfig.parentName}
+      />
     </div>
   );
 }

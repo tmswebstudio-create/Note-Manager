@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { 
+  User, 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updateProfile,
+  signOut as firebaseSignOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
 import { auth, googleAuthProvider } from './firebase.ts';
 import { useStore } from '../store/useStore.ts';
 
@@ -10,7 +18,7 @@ interface AuthContextType {
   authError: string | null;
   signInWithGoogle: () => Promise<void>;
   signIn: (email: string, pass: string) => Promise<void>;
-  signUp: (email: string, pass: string) => Promise<void>;
+  signUp: (email: string, pass: string, name?: string) => Promise<void>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
   clearAuthError: () => void;
@@ -36,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setResources, setCategories, resources, categories } = useStore();
+  const { setResources, setCategories, setUserName, resources, categories } = useStore();
 
   useEffect(() => {
     // Check if guest mode was previously selected
@@ -52,6 +60,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsGuest(false);
         localStorage.removeItem('isGuestMode');
         
+        // Extract display name from Google or email
+        const fetchedName = currentUser.displayName?.trim() || 
+          (currentUser.email ? currentUser.email.split('@')[0] : 'User');
+        setUserName(fetchedName);
+
         // Load data from backend
         try {
           const token = await currentUser.getIdToken();
@@ -68,13 +81,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (e) {
           console.error("Failed to load user data:", e);
         }
+      } else {
+        const isGuestStored = localStorage.getItem('isGuestMode') === 'true';
+        if (!isGuestStored) {
+          setUserName('Guest');
+        }
       }
       
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [setResources, setCategories]);
+  }, [setResources, setCategories, setUserName]);
 
   // Sync effect: When user is logged in and data changes, push to backend.
   useEffect(() => {
@@ -104,7 +122,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async () => {
     try {
       setAuthError(null);
-      await signInWithPopup(auth, googleAuthProvider);
+      const result = await signInWithPopup(auth, googleAuthProvider);
+      if (result.user) {
+        const gName = result.user.displayName?.trim() || (result.user.email ? result.user.email.split('@')[0] : 'User');
+        setUserName(gName);
+      }
     } catch (error: any) {
       console.error('Error signing in with Google', error);
       if (error.code === 'auth/unauthorized-domain') {
@@ -121,7 +143,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, pass: string) => {
     try {
       setAuthError(null);
-      await signInWithEmailAndPassword(auth, email, pass);
+      const result = await signInWithEmailAndPassword(auth, email, pass);
+      if (result.user) {
+        const displayName = result.user.displayName?.trim() || (result.user.email ? result.user.email.split('@')[0] : 'User');
+        setUserName(displayName);
+      }
     } catch (error: any) {
       console.error('Error signing in', error);
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
@@ -136,10 +162,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, pass: string) => {
+  const signUp = async (email: string, pass: string, name?: string) => {
     try {
       setAuthError(null);
-      await createUserWithEmailAndPassword(auth, email, pass);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const resolvedName = name?.trim() || (email ? email.split('@')[0] : 'User');
+      
+      if (userCredential.user) {
+        if (name && name.trim()) {
+          await updateProfile(userCredential.user, {
+            displayName: name.trim()
+          });
+        }
+        setUserName(resolvedName);
+      }
     } catch (error: any) {
       console.error('Error signing up', error);
       if (error.code === 'auth/email-already-in-use') {
@@ -159,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await firebaseSignOut(auth);
       setResources([]);
       setCategories([]);
+      setUserName('Guest');
       setIsGuest(false);
       localStorage.removeItem('isGuestMode');
     } catch (error) {
@@ -168,6 +205,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const continueAsGuest = () => {
     setIsGuest(true);
+    setUserName('Guest');
     localStorage.setItem('isGuestMode', 'true');
   };
 

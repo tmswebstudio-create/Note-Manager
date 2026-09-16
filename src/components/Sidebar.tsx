@@ -17,7 +17,6 @@ import {
   Layers, 
   ChevronRight, 
   ChevronDown,
-  CornerDownRight,
   FolderPlus
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -26,6 +25,8 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Category } from '../types';
+import { CategoryIcon } from './CategoryIcon';
+import { CategoryModal } from './CategoryModal';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -39,8 +40,7 @@ function SortableCategoryItem({
   activeView, 
   setActiveCategory, 
   setIsMobileOpen, 
-  setEditingId, 
-  setEditName, 
+  onEditCategory,
   deleteCategory,
   onAddSubcategory,
   isSidebarCollapsed
@@ -102,15 +102,21 @@ function SortableCategoryItem({
                 e.stopPropagation();
                 setIsExpanded(!isExpanded);
               }}
-              className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              className="p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer shrink-0"
             >
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </div>
           ) : !isSidebarCollapsed ? (
-            <div className="w-3.5" />
+            <div className="w-3.5 shrink-0" />
           ) : null}
 
-          <Folder size={16} className={cn("shrink-0", isCategoryActive ? "text-indigo-600 dark:text-indigo-400 opacity-100" : "opacity-70")} />
+          <CategoryIcon 
+            icon={category.icon} 
+            name={category.name} 
+            isSubcategory={false} 
+            isActive={isCategoryActive}
+            size={isSidebarCollapsed ? "md" : "sm"}
+          />
           
           {!isSidebarCollapsed && (
             <>
@@ -146,11 +152,11 @@ function SortableCategoryItem({
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
-                        onAddSubcategory(category.id);
+                        onAddSubcategory(category.id, category.name);
                         setIsExpanded(true);
                       }}
                       className="p-1 hover:bg-indigo-100 dark:hover:bg-indigo-950/70 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-                      title="Add Sub-category"
+                      title="Add Sub-category (with icon)"
                     >
                       <FolderPlus size={13} />
                     </div>
@@ -158,11 +164,10 @@ function SortableCategoryItem({
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditingId(category.id);
-                        setEditName(category.name);
+                        onEditCategory(category);
                       }}
                       className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-600"
-                      title="Rename"
+                      title="Edit Category & Icon"
                     >
                       <Edit2 size={12} />
                     </div>
@@ -205,18 +210,23 @@ function SortableCategoryItem({
                   )}
                   title={sub.name}
                 >
-                  <CornerDownRight size={12} className={cn(isSubActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400")} />
+                  <CategoryIcon 
+                    icon={sub.icon} 
+                    name={sub.name} 
+                    isSubcategory={true} 
+                    isActive={isSubActive}
+                    size="xs"
+                  />
                   <span className="truncate flex-1">{sub.name}</span>
                   
                   <div className="ml-auto hidden group-hover/sub:flex items-center gap-1">
                     <div
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditingId(sub.id);
-                        setEditName(sub.name);
+                        onEditCategory(sub);
                       }}
                       className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-600"
-                      title="Rename sub-category"
+                      title="Edit Sub-category & Icon"
                     >
                       <Edit2 size={11} />
                     </div>
@@ -252,30 +262,29 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
   const { 
     categories, 
     activeCategoryId, 
-    activeSubcategoryId,
+    activeSubcategoryId, 
     activeView, 
     setActiveCategory, 
     setActiveView, 
-    addCategory, 
-    addSubcategory,
     theme, 
     toggleTheme, 
     deleteCategory, 
-    updateCategory, 
     reorderCategories, 
     isSidebarCollapsed, 
     toggleSidebar 
   } = useStore();
 
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  
-  // State for adding subcategory inline
-  const [addingSubcategoryParentId, setAddingSubcategoryParentId] = useState<string | null>(null);
-  const [newSubcategoryName, setNewSubcategoryName] = useState('');
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
+  const [categoryModalConfig, setCategoryModalConfig] = useState<{
+    isOpen: boolean;
+    editingCategory?: Category | null;
+    parentId?: string | null;
+    parentName?: string;
+  }>({
+    isOpen: false,
+    editingCategory: null,
+    parentId: null,
+    parentName: undefined,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -302,33 +311,6 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
     return map;
   }, [categories]);
 
-  const handleAddCategory = (e: FormEvent) => {
-    e.preventDefault();
-    if (newCategoryName.trim()) {
-      addCategory(newCategoryName.trim());
-      setNewCategoryName('');
-      setIsAddingCategory(false);
-    }
-  };
-
-  const handleAddSubcategory = (e: FormEvent) => {
-    e.preventDefault();
-    if (newSubcategoryName.trim() && addingSubcategoryParentId) {
-      addSubcategory(addingSubcategoryParentId, newSubcategoryName.trim());
-      setNewSubcategoryName('');
-      setAddingSubcategoryParentId(null);
-    }
-  };
-
-  const handleEditCategory = (e: FormEvent) => {
-    e.preventDefault();
-    if (editName.trim() && editingId) {
-      updateCategory(editingId, editName.trim());
-      setEditingId(null);
-      setEditName('');
-    }
-  };
-
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -337,6 +319,33 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
       const newIndex = parentCategories.findIndex((cat) => cat.id === over.id);
       reorderCategories(oldIndex, newIndex);
     }
+  };
+
+  const openAddCategoryModal = () => {
+    if (isSidebarCollapsed) toggleSidebar();
+    setCategoryModalConfig({
+      isOpen: true,
+      editingCategory: null,
+      parentId: null,
+    });
+  };
+
+  const openAddSubcategoryModal = (parentId: string, parentName: string) => {
+    if (isSidebarCollapsed) toggleSidebar();
+    setCategoryModalConfig({
+      isOpen: true,
+      editingCategory: null,
+      parentId,
+      parentName,
+    });
+  };
+
+  const openEditCategoryModal = (cat: Category) => {
+    setCategoryModalConfig({
+      isOpen: true,
+      editingCategory: cat,
+      parentId: cat.parentId || null,
+    });
   };
 
   return (
@@ -483,52 +492,15 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
                 </span>
               )}
               <button 
-                onClick={() => {
-                  if (isSidebarCollapsed) toggleSidebar();
-                  setIsAddingCategory(true);
-                }}
+                onClick={openAddCategoryModal}
                 className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                title="Create New Category / Folder"
+                title="Create New Category / Folder (with custom icon)"
               >
                 <Plus size={14} />
               </button>
             </div>
 
             <div className="space-y-0.5">
-              {isAddingCategory && !isSidebarCollapsed && (
-                <form onSubmit={handleAddCategory} className="mb-2">
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="New category name..."
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    onBlur={() => setIsAddingCategory(false)}
-                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </form>
-              )}
-
-              {/* Inline Subcategory Input */}
-              {addingSubcategoryParentId && !isSidebarCollapsed && (
-                <form onSubmit={handleAddSubcategory} className="mb-2 p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
-                  <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1">
-                    Add Sub-category to {parentCategories.find(c => c.id === addingSubcategoryParentId)?.name}
-                  </div>
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="Sub-category name..."
-                    value={newSubcategoryName}
-                    onChange={(e) => setNewSubcategoryName(e.target.value)}
-                    onBlur={() => {
-                      if (!newSubcategoryName.trim()) setAddingSubcategoryParentId(null);
-                    }}
-                    className="w-full px-2.5 py-1 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </form>
-              )}
-
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -539,43 +511,25 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
                   strategy={verticalListSortingStrategy}
                 >
                   {parentCategories.map(category => (
-                    <div key={category.id} className="mb-0.5">
-                      {editingId === category.id && !isSidebarCollapsed ? (
-                        <form onSubmit={handleEditCategory} className="mb-1">
-                          <input
-                            type="text"
-                            autoFocus
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            onBlur={() => setEditingId(null)}
-                            className="w-full px-3 py-1.5 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </form>
-                      ) : (
-                        <SortableCategoryItem 
-                          category={category}
-                          subcategories={subcategoriesMap[category.id] || []}
-                          activeCategoryId={activeCategoryId}
-                          activeSubcategoryId={activeSubcategoryId}
-                          activeView={activeView}
-                          setActiveCategory={setActiveCategory}
-                          setIsMobileOpen={setIsMobileOpen}
-                          setEditingId={setEditingId}
-                          setEditName={setEditName}
-                          deleteCategory={deleteCategory}
-                          onAddSubcategory={(parentId: string) => {
-                            setAddingSubcategoryParentId(parentId);
-                            setNewSubcategoryName('');
-                          }}
-                          isSidebarCollapsed={isSidebarCollapsed}
-                        />
-                      )}
-                    </div>
+                    <SortableCategoryItem 
+                      key={category.id}
+                      category={category}
+                      subcategories={subcategoriesMap[category.id] || []}
+                      activeCategoryId={activeCategoryId}
+                      activeSubcategoryId={activeSubcategoryId}
+                      activeView={activeView}
+                      setActiveCategory={setActiveCategory}
+                      setIsMobileOpen={setIsMobileOpen}
+                      onEditCategory={openEditCategoryModal}
+                      deleteCategory={deleteCategory}
+                      onAddSubcategory={openAddSubcategoryModal}
+                      isSidebarCollapsed={isSidebarCollapsed}
+                    />
                   ))}
                 </SortableContext>
               </DndContext>
               
-              {parentCategories.length === 0 && !isAddingCategory && !isSidebarCollapsed && (
+              {parentCategories.length === 0 && !isSidebarCollapsed && (
                 <div className="px-3 py-3 text-xs text-center text-slate-400">
                   No categories yet
                 </div>
@@ -600,32 +554,69 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
           <AuthButton isSidebarCollapsed={isSidebarCollapsed} />
         </div>
       </aside>
+
+      {/* Category & Sub-category Create/Edit Modal with Icon Link Upload/Entry */}
+      <CategoryModal
+        isOpen={categoryModalConfig.isOpen}
+        onClose={() => setCategoryModalConfig({ isOpen: false, editingCategory: null, parentId: null })}
+        editingCategory={categoryModalConfig.editingCategory}
+        parentId={categoryModalConfig.parentId}
+        parentName={categoryModalConfig.parentName}
+      />
     </>
   );
 }
 
 function AuthButton({ isSidebarCollapsed }: { isSidebarCollapsed: boolean }) {
   const { user, isGuest, signOut } = useAuth();
+  const { userName } = useStore();
+  const effectiveName = user?.displayName?.trim() || (userName !== 'Guest' ? userName : null) || (user?.email ? user.email.split('@')[0] : (isGuest ? 'Guest' : 'User'));
   
   if (user || isGuest) {
     return (
-      <button 
-        onClick={signOut}
-        className={cn(
-          "flex items-center justify-center py-2 px-3 text-xs font-medium rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors",
-          isSidebarCollapsed ? "w-full" : "w-full gap-2"
+      <div className="flex flex-col gap-1.5">
+        {!isSidebarCollapsed && user && (
+          <div className="px-2 py-1 flex items-center gap-2.5 rounded-lg bg-slate-100/60 dark:bg-slate-800/40">
+            {user.photoURL ? (
+              <img 
+                src={user.photoURL} 
+                alt={effectiveName} 
+                className="w-6 h-6 rounded-full object-cover shrink-0" 
+                referrerPolicy="no-referrer" 
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold flex items-center justify-center shrink-0">
+                {effectiveName ? effectiveName.charAt(0).toUpperCase() : 'U'}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{effectiveName}</p>
+              <p className="text-[10px] text-slate-400 truncate">{user.email || 'Signed in'}</p>
+            </div>
+          </div>
         )}
-        title={isGuest ? "Exit Guest Mode" : "Sign Out"}
-      >
-        <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-slate-200 dark:bg-slate-700">
-          {user && user.photoURL ? (
-            <img src={user.photoURL} alt={user.displayName || 'User'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-          ) : (
-            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">G</span>
+        <button 
+          onClick={signOut}
+          className={cn(
+            "flex items-center justify-center py-2 px-3 text-xs font-medium rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors",
+            isSidebarCollapsed ? "w-full" : "w-full gap-2"
           )}
-        </div>
-        {!isSidebarCollapsed && <span className="truncate">{isGuest ? "Exit Guest Mode" : "Sign Out"}</span>}
-      </button>
+          title={isGuest ? "Exit Guest Mode" : "Sign Out"}
+        >
+          {isSidebarCollapsed ? (
+            <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-slate-200 dark:bg-slate-700">
+              {user && user.photoURL ? (
+                <img src={user.photoURL} alt={effectiveName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  {effectiveName ? effectiveName.charAt(0).toUpperCase() : 'G'}
+                </span>
+              )}
+            </div>
+          ) : null}
+          {!isSidebarCollapsed && <span className="truncate">{isGuest ? "Exit Guest Mode" : "Sign Out"}</span>}
+        </button>
+      </div>
     );
   }
   

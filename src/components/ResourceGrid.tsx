@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { ResourceCard } from './ResourceCard';
-import { Resource } from '../types';
-import { Layers, Plus, FolderPlus, Tag } from 'lucide-react';
+import { Resource, Category } from '../types';
+import { Layers, Plus, FolderPlus, Edit2 } from 'lucide-react';
 import { cn } from './Sidebar';
+import { CategoryIcon } from './CategoryIcon';
+import { CategoryModal } from './CategoryModal';
 
 export function ResourceGrid({ onEdit, onAddResource }: { onEdit: (r: Resource) => void, onAddResource?: (defaultCategoryId?: string, defaultSubcategoryId?: string) => void }) {
   const { 
@@ -13,12 +15,19 @@ export function ResourceGrid({ onEdit, onAddResource }: { onEdit: (r: Resource) 
     activeSubcategoryId, 
     setActiveSubcategory, 
     activeView, 
-    searchQuery,
-    addSubcategory 
+    searchQuery 
   } = useStore();
 
-  const [isAddingSubcat, setIsAddingSubcat] = useState(false);
-  const [newSubcatName, setNewSubcatName] = useState('');
+  const [categoryModalConfig, setCategoryModalConfig] = useState<{
+    isOpen: boolean;
+    editingCategory?: Category | null;
+    parentId?: string | null;
+    parentName?: string;
+  }>({
+    isOpen: false,
+    editingCategory: null,
+    parentId: null,
+  });
 
   const activeCategory = activeCategoryId ? categories.find(c => c.id === activeCategoryId) : null;
   const subcategories = activeCategoryId ? categories.filter(c => c.parentId === activeCategoryId) : [];
@@ -52,39 +61,53 @@ export function ResourceGrid({ onEdit, onAddResource }: { onEdit: (r: Resource) 
     filtered.sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  const handleCreateSubcategory = (e: FormEvent) => {
-    e.preventDefault();
-    if (newSubcatName.trim() && activeCategoryId) {
-      const newSubId = addSubcategory(activeCategoryId, newSubcatName.trim());
-      setNewSubcatName('');
-      setIsAddingSubcat(false);
-      setActiveSubcategory(newSubId);
-    }
-  };
-
   return (
     <div className="p-4 sm:p-8 space-y-6">
       
       {/* Sub-category Header & Filtering Toolbar for Category View */}
-      {activeView === 'category' && activeCategoryId && (
+      {activeView === 'category' && activeCategoryId && activeCategory && (
         <div className="space-y-3 pb-2 border-b border-slate-200 dark:border-slate-800">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <CategoryIcon 
+                icon={activeCategory.icon} 
+                name={activeCategory.name} 
+                isSubcategory={false} 
+                size="md" 
+              />
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Sub-categories
+                Sub-categories in {activeCategory.name}
               </span>
               <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
                 {subcategories.length}
               </span>
+              <button
+                onClick={() => {
+                  setCategoryModalConfig({
+                    isOpen: true,
+                    editingCategory: activeCategory,
+                    parentId: null,
+                  });
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                title={`Edit ${activeCategory.name} icon & name`}
+              >
+                <Edit2 size={13} />
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setIsAddingSubcat(!isAddingSubcat);
-                  setNewSubcatName('');
+                  setCategoryModalConfig({
+                    isOpen: true,
+                    editingCategory: null,
+                    parentId: activeCategoryId,
+                    parentName: activeCategory.name,
+                  });
                 }}
                 className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg flex items-center gap-1 transition-colors"
+                title="Add sub-category with custom icon link"
               >
                 <FolderPlus size={13} />
                 <span>Add Sub-category</span>
@@ -102,36 +125,6 @@ export function ResourceGrid({ onEdit, onAddResource }: { onEdit: (r: Resource) 
             </div>
           </div>
 
-          {/* Inline Sub-category Creation Form */}
-          {isAddingSubcat && (
-            <form 
-              onSubmit={handleCreateSubcategory}
-              className="flex items-center gap-2 p-2 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl animate-in fade-in"
-            >
-              <input
-                type="text"
-                autoFocus
-                placeholder={`New sub-category for ${activeCategory?.name}...`}
-                value={newSubcatName}
-                onChange={(e) => setNewSubcatName(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              <button
-                type="submit"
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm"
-              >
-                Create
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAddingSubcat(false)}
-                className="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              >
-                Cancel
-              </button>
-            </form>
-          )}
-
           {/* Sub-category Filter Tabs */}
           {subcategories.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -144,29 +137,36 @@ export function ResourceGrid({ onEdit, onAddResource }: { onEdit: (r: Resource) 
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                 )}
               >
-                All in {activeCategory?.name} ({resources.filter(r => r.categoryId === activeCategoryId).length})
+                All in {activeCategory.name} ({resources.filter(r => r.categoryId === activeCategoryId).length})
               </button>
 
               {subcategories.map(sub => {
                 const count = resources.filter(r => r.categoryId === activeCategoryId && r.subcategoryId === sub.id).length;
                 const isSelected = activeSubcategoryId === sub.id;
                 return (
-                  <button
-                    key={sub.id}
-                    onClick={() => setActiveSubcategory(isSelected ? null : sub.id)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5",
-                      isSelected
-                        ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                    )}
-                  >
-                    <Tag size={11} className={isSelected ? "text-white" : "text-indigo-500"} />
-                    <span>{sub.name}</span>
-                    <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
-                      {count}
-                    </span>
-                  </button>
+                  <div key={sub.id} className="inline-flex items-center">
+                    <button
+                      onClick={() => setActiveSubcategory(isSelected ? null : sub.id)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5",
+                        isSelected
+                          ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      <CategoryIcon 
+                        icon={sub.icon} 
+                        name={sub.name} 
+                        isSubcategory={true} 
+                        size="xs" 
+                        isActive={isSelected}
+                      />
+                      <span>{sub.name}</span>
+                      <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+                        {count}
+                      </span>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -205,6 +205,15 @@ export function ResourceGrid({ onEdit, onAddResource }: { onEdit: (r: Resource) 
           ))}
         </div>
       )}
+
+      {/* Category/Subcategory Modal */}
+      <CategoryModal
+        isOpen={categoryModalConfig.isOpen}
+        onClose={() => setCategoryModalConfig({ isOpen: false, editingCategory: null, parentId: null })}
+        editingCategory={categoryModalConfig.editingCategory}
+        parentId={categoryModalConfig.parentId}
+        parentName={categoryModalConfig.parentName}
+      />
     </div>
   );
 }
