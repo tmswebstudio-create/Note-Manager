@@ -129,3 +129,126 @@ export function getResourceImage(type: string, url: string, customImage?: string
   
   return getAutoThumbnail(url);
 }
+
+export interface MetadataResult {
+  title: string;
+  description?: string;
+  coverImage?: string;
+  author?: string;
+  type?: 'Video' | 'Post' | 'Website';
+  source?: string;
+}
+
+/**
+ * Robust cross-platform fetch for YouTube, Vimeo, Twitter, Articles, and Website metadata
+ */
+export async function fetchUrlMetadata(rawUrl: string): Promise<MetadataResult> {
+  const cleanUrl = normalizeUrl(rawUrl);
+  if (!cleanUrl) {
+    throw new Error('Please enter a valid URL');
+  }
+
+  const isYt = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be');
+  const isVimeo = cleanUrl.includes('vimeo.com');
+
+  // Try server API first
+  try {
+    const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
+    const res = await fetch(`${APP_URL}/api/metadata`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: cleanUrl }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.title && data.title !== 'Video' && data.title !== 'Website') {
+        return {
+          title: data.title,
+          description: data.description || '',
+          coverImage: data.coverImage || getAutoThumbnail(cleanUrl),
+          author: data.author || '',
+          type: data.type || (isYt || isVimeo ? 'Video' : 'Website'),
+          source: 'server',
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Server metadata fetch failed, trying client fallback:', err);
+  }
+
+  // Client-side Direct oEmbed for YouTube (always reliable, CORS-friendly, zero-API-key)
+  if (isYt) {
+    try {
+      const ytRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(cleanUrl)}&format=json`);
+      if (ytRes.ok) {
+        const ytData = await ytRes.json();
+        return {
+          title: ytData.title || '',
+          author: ytData.author_name || '',
+          coverImage: ytData.thumbnail_url || getAutoThumbnail(cleanUrl),
+          type: 'Video',
+          source: 'youtube-oembed',
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Client-side Direct oEmbed for Vimeo
+  if (isVimeo) {
+    try {
+      const vimeoRes = await fetch(`https://vimeo.com/api/oembed.json?url=${encodeURIComponent(cleanUrl)}`);
+      if (vimeoRes.ok) {
+        const vimeoData = await vimeoRes.json();
+        return {
+          title: vimeoData.title || '',
+          author: vimeoData.author_name || '',
+          coverImage: vimeoData.thumbnail_url || getAutoThumbnail(cleanUrl),
+          type: 'Video',
+          source: 'vimeo-oembed',
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Client-side noembed.com fallback
+  try {
+    const noRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(cleanUrl)}`);
+    if (noRes.ok) {
+      const noData = await noRes.json();
+      if (noData.title) {
+        return {
+          title: noData.title,
+          author: noData.author_name || '',
+          coverImage: noData.thumbnail_url || getAutoThumbnail(cleanUrl),
+          type: isYt || isVimeo ? 'Video' : 'Post',
+          source: 'noembed',
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Default fallback
+  try {
+    const hostname = new URL(cleanUrl).hostname.replace(/^www\./, '');
+    return {
+      title: hostname,
+      coverImage: getAutoThumbnail(cleanUrl),
+      type: isYt || isVimeo ? 'Video' : 'Website',
+      source: 'domain-fallback',
+    };
+  } catch {
+    return {
+      title: isYt ? 'YouTube Video' : 'Web Resource',
+      coverImage: getAutoThumbnail(cleanUrl),
+      type: isYt || isVimeo ? 'Video' : 'Website',
+      source: 'generic-fallback',
+    };
+  }
+}

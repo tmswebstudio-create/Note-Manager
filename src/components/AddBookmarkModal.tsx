@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { useStore } from '../store/useStore';
 import { Resource } from '../types';
-import { X, Loader2, Link as LinkIcon, AlertCircle, Sparkles, Globe, FolderTree, Plus } from 'lucide-react';
-import { getFaviconUrl, getDuckDuckGoFaviconUrl, normalizeUrl } from '../utils/url-helpers';
+import { 
+  X, Loader2, Link as LinkIcon, AlertCircle, Sparkles, 
+  Globe, FolderTree, Plus, CheckCircle2, RefreshCw 
+} from 'lucide-react';
+import { getFaviconUrl, getDuckDuckGoFaviconUrl, normalizeUrl, fetchUrlMetadata } from '../utils/url-helpers';
 
 interface AddBookmarkModalProps {
   onClose: () => void;
@@ -54,6 +57,7 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
   
   const [faviconUrl, setFaviconUrl] = useState(editResource?.coverImage || '');
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+  const [fetchedStatus, setFetchedStatus] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Selected parent category object
@@ -67,11 +71,55 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
     return categories.filter(c => c.parentId === currentSelectedCategory.id);
   }, [categories, currentSelectedCategory]);
 
+  const handleFetchMetadata = async (targetUrl?: string) => {
+    const rawToFetch = targetUrl || url;
+    const cleanUrl = normalizeUrl(rawToFetch);
+    if (!cleanUrl) {
+      setError('Please enter a valid URL first');
+      return;
+    }
+
+    setIsLoadingMetadata(true);
+    setError('');
+    setFetchedStatus(null);
+
+    try {
+      const autoFav = getFaviconUrl(cleanUrl, 128);
+      if (autoFav && !faviconUrl) {
+        setFaviconUrl(autoFav);
+      }
+
+      const meta = await fetchUrlMetadata(cleanUrl);
+      if (meta.title && meta.title !== 'Website') {
+        setTitle(meta.title);
+        setFetchedStatus('Title fetched!');
+      } else {
+        try {
+          const host = new URL(cleanUrl).hostname.replace(/^www\./, '');
+          if (!title) setTitle(host);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!faviconUrl) {
+        setFaviconUrl(getFaviconUrl(cleanUrl, 128));
+      }
+    } catch (err: any) {
+      console.warn('Metadata fetch error:', err?.message);
+    } finally {
+      setIsLoadingMetadata(false);
+    }
+  };
+
   // Auto-fetch favicon and website title when URL changes
   useEffect(() => {
     if (editResource) return;
     const cleanUrl = normalizeUrl(url);
-    if (!cleanUrl) return;
+    if (!cleanUrl) {
+      setFetchedStatus(null);
+      return;
+    }
 
     // Instant local favicon generation
     const autoFav = getFaviconUrl(cleanUrl, 128);
@@ -79,39 +127,12 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
       setFaviconUrl(autoFav);
     }
 
-    const debounceTimeout = setTimeout(async () => {
-      try {
-        setIsLoadingMetadata(true);
-        setError('');
-        const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-        
-        const res = await fetch(`${APP_URL}/api/metadata`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: cleanUrl })
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data.title && data.title !== 'Website') {
-            setTitle(data.title);
-          }
-          if (!faviconUrl) {
-            setFaviconUrl(getFaviconUrl(cleanUrl, 128));
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch metadata", err);
-        if (!faviconUrl) {
-          setFaviconUrl(getFaviconUrl(cleanUrl, 128));
-        }
-      } finally {
-        setIsLoadingMetadata(false);
-      }
-    }, 600);
+    const debounceTimeout = setTimeout(() => {
+      handleFetchMetadata(cleanUrl);
+    }, 700);
 
     return () => clearTimeout(debounceTimeout);
-  }, [url, editResource]);
+  }, [url]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -207,35 +228,67 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
 
           <form id="bookmark-form" onSubmit={handleSubmit} className="space-y-4">
             
-            {/* URL */}
+            {/* URL with Instant Fetch Button */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                Website URL <span className="text-red-500">*</span>
-                {isLoadingMetadata && (
-                  <span className="text-[11px] text-indigo-500 font-normal flex items-center gap-1">
-                    <Loader2 size={11} className="animate-spin" /> Fetching favicon & title...
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  Website URL <span className="text-red-500">*</span>
+                </label>
+                {fetchedStatus ? (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 animate-in fade-in">
+                    <CheckCircle2 size={12} /> {fetchedStatus}
                   </span>
-                )}
-              </label>
-              <div className="relative">
-                <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                ) : isLoadingMetadata ? (
+                  <span className="text-[11px] text-indigo-500 font-medium flex items-center gap-1 animate-in fade-in">
+                    <Loader2 size={11} className="animate-spin" /> Fetching title...
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="relative flex items-center">
+                <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
                 <input
                   type="text"
-                  placeholder="e.g. milanote.com or https://milanote.com"
+                  placeholder="e.g. figma.com, github.com, or blog link"
                   value={url}
                   onChange={e => setUrl(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  className="w-full pl-9 pr-24 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white transition-all"
                   required
                   autoFocus={!editResource}
                 />
+                <button
+                  type="button"
+                  onClick={() => handleFetchMetadata()}
+                  disabled={isLoadingMetadata || !url.trim()}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200/60 dark:border-indigo-800/60 transition-all flex items-center gap-1.5 disabled:opacity-40"
+                  title="Fetch website title & favicon"
+                >
+                  {isLoadingMetadata ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={12} />
+                  )}
+                  <span>Fetch</span>
+                </button>
               </div>
             </div>
 
             {/* Title */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Title / Name <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  Title / Name <span className="text-red-500">*</span>
+                </label>
+                {title && url && (
+                  <button
+                    type="button"
+                    onClick={() => handleFetchMetadata()}
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <RefreshCw size={11} /> Re-fetch title
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 placeholder="e.g. Milanote, Figma, GitHub"
@@ -298,91 +351,67 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
                 <input
                   type="text"
                   list="bookmark-subcategories-datalist"
-                  placeholder={categoryInput ? `e.g. Under ${categoryInput}: Icons, Inspiration, UI Kits` : "e.g. Icons, UI Kits, Docs"}
+                  placeholder="e.g. Prototyping, UI Kits, Tutorials"
                   value={subcategoryInput}
                   onChange={e => setSubcategoryInput(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-indigo-200 dark:border-indigo-800/80 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder-slate-400"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/60 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
                 />
                 <datalist id="bookmark-subcategories-datalist">
                   {availableSubcategories.map(s => <option key={s.id} value={s.name} />)}
                 </datalist>
-                <p className="text-[11px] text-indigo-600/70 dark:text-indigo-400/70">
-                  Select an existing sub-category or type a new one to create it automatically.
-                </p>
               </div>
             )}
 
-            {/* Auto Favicon Preview */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Favicon Preview
-                </label>
-                {url && (
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      const cleanUrl = normalizeUrl(url);
-                      if (cleanUrl) setFaviconUrl(getFaviconUrl(cleanUrl, 128));
-                    }} 
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
-                  >
-                    <Sparkles size={11} /> Re-fetch icon
-                  </button>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl">
-                <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center p-1.5 shrink-0 shadow-sm">
-                  {previewIcon ? (
+            {/* Favicon / Icon URL */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                Custom Favicon / Icon URL <span className="text-[11px] font-normal text-slate-400 lowercase">(optional)</span>
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  placeholder="https://... or leave blank for auto favicon"
+                  value={faviconUrl}
+                  onChange={e => setFaviconUrl(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                />
+                {previewIcon && (
+                  <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800">
                     <img 
                       src={previewIcon} 
                       alt="Favicon preview" 
-                      className="w-7 h-7 object-contain"
+                      className="w-5 h-5 object-contain"
                       referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        const ddg = getDuckDuckGoFaviconUrl(url);
-                        if (ddg && (e.target as HTMLImageElement).src !== ddg) {
-                          (e.target as HTMLImageElement).src = ddg;
-                        }
+                      onError={e => {
+                        (e.target as HTMLElement).style.display = 'none';
                       }}
                     />
-                  ) : (
-                    <Globe size={22} className="text-slate-400" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
-                    {title || 'Favicon Preview'}
-                  </p>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    Auto-fetched 128px high-res favicon
-                  </p>
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
           </form>
         </div>
-        
+
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 bg-slate-50/50 dark:bg-slate-900/50">
-          <button 
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+          <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
           >
             Cancel
           </button>
-          <button 
+          <button
             type="submit"
             form="bookmark-form"
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-1.5"
+            className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-1.5"
           >
-            <Globe size={14} />
-            <span>{editResource ? 'Save Bookmark' : 'Add Bookmark'}</span>
+            <span>{editResource ? 'Save Changes' : 'Add Bookmark'}</span>
           </button>
         </div>
+
       </div>
     </div>
   );

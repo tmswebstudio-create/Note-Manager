@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { useStore } from '../store/useStore';
 import { Resource } from '../types';
-import { X, Loader2, Image as ImageIcon, Link as LinkIcon, AlertCircle, Sparkles, Play, FileText, Layers, FolderTree, Plus } from 'lucide-react';
+import { 
+  X, Loader2, Image as ImageIcon, Link as LinkIcon, AlertCircle, 
+  Sparkles, Play, FileText, Layers, FolderTree, Plus, CheckCircle2, RefreshCw
+} from 'lucide-react';
 import { cn } from './Sidebar';
-import { getAutoThumbnail, normalizeUrl } from '../utils/url-helpers';
+import { getAutoThumbnail, normalizeUrl, fetchUrlMetadata, MetadataResult } from '../utils/url-helpers';
 
 interface AddResourceModalProps {
   onClose: () => void;
@@ -14,7 +17,7 @@ interface AddResourceModalProps {
 
 const RESOURCE_TYPES: { type: 'Video' | 'Post'; label: string; icon: any; hint: string }[] = [
   { type: 'Video', label: 'Video', icon: Play, hint: 'YouTube, Vimeo, Courses' },
-  { type: 'Post', label: 'Post / Article', icon: FileText, hint: 'Medium, Dev.to, Blogs, Docs' },
+  { type: 'Post', label: 'Post / Article', icon: FileText, hint: 'Medium, Dev.to, Blogs, Docs, Tweets' },
 ];
 
 export function AddResourceModal({ onClose, editResource, defaultCategoryId, defaultSubcategoryId }: AddResourceModalProps) {
@@ -63,6 +66,7 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
   const [description, setDescription] = useState(editResource?.description || '');
   
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+  const [fetchedStatus, setFetchedStatus] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Selected parent category object
@@ -76,67 +80,96 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
     return categories.filter(c => c.parentId === currentSelectedCategory.id);
   }, [categories, currentSelectedCategory]);
 
-  // Auto-detect thumbnail and title when URL changes
+  // Manual & automated fetch metadata function
+  const handleFetchMetadata = async (targetUrl?: string) => {
+    const rawToFetch = targetUrl || url;
+    const cleanUrl = normalizeUrl(rawToFetch);
+    if (!cleanUrl) {
+      setError('Please enter a valid URL first');
+      return;
+    }
+
+    setIsLoadingMetadata(true);
+    setError('');
+    setFetchedStatus(null);
+
+    try {
+      const isVideoUrl = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be') || cleanUrl.includes('vimeo.com');
+      if (isVideoUrl) {
+        setType('Video');
+      }
+
+      // Quick local thumbnail fallback
+      const localThumb = getAutoThumbnail(cleanUrl);
+      if (localThumb && !coverImage) {
+        setCoverImage(localThumb);
+      }
+
+      const meta: MetadataResult = await fetchUrlMetadata(cleanUrl);
+
+      if (meta.title && meta.title !== 'Video' && meta.title !== 'Website') {
+        setTitle(meta.title);
+      }
+      if (meta.description && !description) {
+        setDescription(meta.description);
+      }
+      if (meta.coverImage) {
+        setCoverImage(meta.coverImage);
+      } else if (localThumb) {
+        setCoverImage(localThumb);
+      }
+      if (meta.type && (meta.type === 'Video' || meta.type === 'Post')) {
+        setType(meta.type);
+      }
+
+      const sourceLabel = isVideoUrl 
+        ? 'YouTube video title fetched!' 
+        : (cleanUrl.includes('twitter.com') || cleanUrl.includes('x.com') 
+          ? 'Post fetched from X!' 
+          : 'Title fetched successfully!');
+      
+      setFetchedStatus(sourceLabel);
+    } catch (err: any) {
+      console.warn('Metadata fetch issue:', err?.message);
+      const fallback = getAutoThumbnail(cleanUrl);
+      if (fallback && !coverImage) setCoverImage(fallback);
+    } finally {
+      setIsLoadingMetadata(false);
+    }
+  };
+
+  // Auto-fetch on URL change (with debounce)
   useEffect(() => {
     if (editResource) return;
     const cleanUrl = normalizeUrl(url);
-    if (!cleanUrl) return;
+    if (!cleanUrl) {
+      setFetchedStatus(null);
+      return;
+    }
 
-    // Detect Video type automatically for YouTube/Vimeo
+    // Auto-detect video type immediately
     const isVideo = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be') || cleanUrl.includes('vimeo.com');
     if (isVideo) {
       setType('Video');
     }
 
-    // Instant local thumbnail detection
     const instantThumb = getAutoThumbnail(cleanUrl);
     if (instantThumb && !coverImage) {
       setCoverImage(instantThumb);
     }
 
-    const debounceTimeout = setTimeout(async () => {
-      try {
-        setIsLoadingMetadata(true);
-        setError('');
-        const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-        
-        const res = await fetch(`${APP_URL}/api/metadata`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: cleanUrl })
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (data.title && data.title !== 'Website' && data.title !== 'Video') setTitle(data.title);
-          if (data.description) setDescription(data.description);
-          
-          if (data.coverImage) {
-            setCoverImage(data.coverImage);
-          } else if (!coverImage) {
-            const fallback = getAutoThumbnail(cleanUrl);
-            if (fallback) setCoverImage(fallback);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch metadata", err);
-        if (!coverImage) {
-          const fallback = getAutoThumbnail(cleanUrl);
-          if (fallback) setCoverImage(fallback);
-        }
-      } finally {
-        setIsLoadingMetadata(false);
-      }
-    }, 800);
+    const timeout = setTimeout(() => {
+      handleFetchMetadata(cleanUrl);
+    }, 700);
 
-    return () => clearTimeout(debounceTimeout);
-  }, [url, editResource]);
+    return () => clearTimeout(timeout);
+  }, [url]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const cleanUrl = normalizeUrl(url);
-    if (!cleanUrl || !title || !categoryInput.trim()) {
-      setError('Please fill in all required fields with a valid URL');
+    if (!cleanUrl || !title.trim() || !categoryInput.trim()) {
+      setError('Please fill in all required fields with a valid URL and title');
       return;
     }
 
@@ -197,11 +230,11 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
   const previewCover = coverImage || (url ? getAutoThumbnail(url) : null);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-full border border-slate-200/80 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-slate-200/80 dark:border-slate-800">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Layers size={18} />
@@ -219,36 +252,57 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
         </div>
         
         {/* Form Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-medium rounded-xl flex items-center gap-2">
-              <AlertCircle size={15} /> {error}
+              <AlertCircle size={15} className="shrink-0" /> {error}
             </div>
           )}
 
           <form id="resource-form" onSubmit={handleSubmit} className="space-y-4">
             
-            {/* URL */}
+            {/* URL with Instant Fetch Button */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                Resource URL <span className="text-red-500">*</span>
-                {isLoadingMetadata && (
-                  <span className="text-[11px] text-indigo-500 font-normal flex items-center gap-1">
-                    <Loader2 size={11} className="animate-spin" /> Fetching details & thumbnail...
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  Resource URL <span className="text-red-500">*</span>
+                </label>
+                {fetchedStatus ? (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 animate-in fade-in">
+                    <CheckCircle2 size={12} /> {fetchedStatus}
                   </span>
-                )}
-              </label>
-              <div className="relative">
-                <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                ) : isLoadingMetadata ? (
+                  <span className="text-[11px] text-indigo-500 font-medium flex items-center gap-1 animate-in fade-in">
+                    <Loader2 size={11} className="animate-spin" /> Fetching title & cover...
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="relative flex items-center">
+                <LinkIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={15} />
                 <input
                   type="text"
-                  placeholder="e.g. youtube.com/watch?v=... or blog url"
+                  placeholder="Paste YouTube, Medium, Blog, or Tweet link..."
                   value={url}
                   onChange={e => setUrl(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  className="w-full pl-9 pr-24 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white transition-all"
                   required
                   autoFocus={!editResource}
                 />
+                <button
+                  type="button"
+                  onClick={() => handleFetchMetadata()}
+                  disabled={isLoadingMetadata || !url.trim()}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200/60 dark:border-indigo-800/60 transition-all flex items-center gap-1.5 disabled:opacity-40"
+                  title="Fetch title, thumbnail, and details"
+                >
+                  {isLoadingMetadata ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={12} />
+                  )}
+                  <span>Fetch</span>
+                </button>
               </div>
             </div>
 
@@ -282,14 +336,25 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
               </div>
             </div>
 
-            {/* Title */}
+            {/* Title with auto-fill & re-sync */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Title <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  Title <span className="text-red-500">*</span>
+                </label>
+                {title && url && (
+                  <button
+                    type="button"
+                    onClick={() => handleFetchMetadata()}
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <RefreshCw size={11} /> Re-fetch title
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
-                placeholder={type === 'Video' ? 'e.g. Complete React & TypeScript Course' : 'e.g. Advanced State Management Guide'}
+                placeholder={type === 'Video' ? 'e.g. Complete React & TypeScript Masterclass' : 'e.g. Advanced State Management Guide'}
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
@@ -349,111 +414,84 @@ export function AddResourceModal({ onClose, editResource, defaultCategoryId, def
                 <input
                   type="text"
                   list="resource-subcategories-datalist"
-                  placeholder={categoryInput ? `e.g. Under ${categoryInput}: React 19, Hooks, System Design` : "e.g. React, Docker, Python"}
+                  placeholder="e.g. Hooks, Components, Animations"
                   value={subcategoryInput}
                   onChange={e => setSubcategoryInput(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-indigo-200 dark:border-indigo-800/80 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder-slate-400"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/60 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
                 />
                 <datalist id="resource-subcategories-datalist">
                   {availableSubcategories.map(s => <option key={s.id} value={s.name} />)}
                 </datalist>
-                <p className="text-[11px] text-indigo-600/70 dark:text-indigo-400/70">
-                  Select an existing sub-category or type a new one to create it automatically.
-                </p>
               </div>
             )}
 
-            {/* Thumbnail */}
+            {/* Thumbnail / Cover Image */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Cover Thumbnail
-                </label>
-                <div className="flex items-center gap-2">
-                  {url && (
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const cleanUrl = normalizeUrl(url);
-                        if (cleanUrl) {
-                          const thumb = getAutoThumbnail(cleanUrl);
-                          if (thumb) setCoverImage(thumb);
-                        }
-                      }} 
-                      className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
-                    >
-                      <Sparkles size={11} /> Auto-fetch thumbnail
-                    </button>
-                  )}
-                  {coverImage && (
-                    <button type="button" onClick={() => setCoverImage('')} className="text-[11px] text-red-500 hover:underline">Clear</button>
-                  )}
-                </div>
-              </div>
-              
-              <div className="relative">
-                <ImageIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                <input
-                  type="url"
-                  placeholder="Auto-fetched video/post thumbnail if blank"
-                  value={coverImage}
-                  onChange={e => setCoverImage(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                />
-              </div>
-              
-              {previewCover && (
-                <div className="mt-2 w-full aspect-video rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden border border-slate-200 dark:border-slate-700 relative">
-                  <img 
-                    src={previewCover} 
-                    alt="Cover preview" 
-                    className="w-full h-full object-cover" 
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      const fallback = getAutoThumbnail(url);
-                      if (fallback && (e.target as HTMLImageElement).src !== fallback) {
-                        (e.target as HTMLImageElement).src = fallback;
-                      }
-                    }}
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                Cover Image URL <span className="text-[11px] font-normal text-slate-400 lowercase">(auto-detected from video/article)</span>
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <ImageIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                  <input
+                    type="text"
+                    placeholder="https://... (auto-detected)"
+                    value={coverImage}
+                    onChange={e => setCoverImage(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
                   />
                 </div>
-              )}
+                {previewCover && (
+                  <div className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 bg-slate-100 dark:bg-slate-800 shadow-sm">
+                    <img 
+                      src={previewCover} 
+                      alt="Thumbnail preview" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={e => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-            
-            {/* Description */}
+
+            {/* Description / Notes */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Notes / Summary (Optional)
+                Description / Notes <span className="text-[11px] font-normal text-slate-400 lowercase">(optional)</span>
               </label>
               <textarea
                 rows={2}
-                placeholder="Key takeaways, chapters, or notes..."
+                placeholder="Key takeaways, concepts covered, or summary..."
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white resize-none"
               />
             </div>
+
           </form>
         </div>
-        
+
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 bg-slate-50/50 dark:bg-slate-900/50">
-          <button 
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+          <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
           >
             Cancel
           </button>
-          <button 
+          <button
             type="submit"
             form="resource-form"
-            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-1.5"
+            className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-1.5"
           >
-            <Layers size={14} />
-            <span>{editResource ? 'Save Resource' : 'Add Resource'}</span>
+            <span>{editResource ? 'Save Changes' : 'Add Resource'}</span>
           </button>
         </div>
+
       </div>
     </div>
   );

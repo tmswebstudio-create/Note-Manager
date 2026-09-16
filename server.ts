@@ -74,88 +74,193 @@ async function startServer() {
       }
 
       const url = normalizedUrl;
+      const lowerUrl = url.toLowerCase();
 
       // Special handling for Video / Post / Website URL
-      const isYoutube = url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com');
-      let defaultTitle = isYoutube ? 'Video' : 'Website';
-      let defaultType = isYoutube ? 'Video' : 'Website';
+      const isYoutube = lowerUrl.includes('youtube.com') || lowerUrl.includes('youtu.be');
+      const isVimeo = lowerUrl.includes('vimeo.com');
+      const isTwitter = lowerUrl.includes('twitter.com') || lowerUrl.includes('x.com');
+      
+      let defaultType = (isYoutube || isVimeo) ? 'Video' : 'Website';
+      let title = '';
+      let description = '';
       let coverImage = '';
+      let authorName = '';
 
-      if (url.includes('youtube.com/watch') || url.includes('youtu.be')) {
-        defaultType = 'Video';
-        let videoId = '';
+      // 1. YouTube oEmbed (fast, accurate, no bot blocks, returns official video title & thumbnail)
+      if (isYoutube) {
         try {
-          if (url.includes('youtube.com/watch')) {
-            const urlParams = new URLSearchParams(new URL(url).search);
-            videoId = urlParams.get('v') || '';
-          } else if (url.includes('youtu.be')) {
-            videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
+          const ytOembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+          const ytRes = await fetch(ytOembedUrl, { signal: AbortSignal.timeout(3500) });
+          if (ytRes.ok) {
+            const ytData = await ytRes.json();
+            if (ytData.title) title = ytData.title;
+            if (ytData.author_name) authorName = ytData.author_name;
+            if (ytData.thumbnail_url) coverImage = ytData.thumbnail_url;
+            defaultType = 'Video';
           }
-          if (videoId) {
-            coverImage = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-          }
-        } catch {
-          // ignore parsing errors
+        } catch (ytErr) {
+          console.warn('YouTube oEmbed fallback:', (ytErr as Error)?.message);
         }
-      } else if (url.includes('youtube.com/playlist') || url.includes('vimeo.com')) {
-        defaultType = 'Video';
+
+        // Fallback YouTube thumbnail if not provided
+        if (!coverImage) {
+          let videoId = '';
+          try {
+            if (url.includes('youtube.com/watch')) {
+              const urlParams = new URLSearchParams(new URL(url).search);
+              videoId = urlParams.get('v') || '';
+            } else if (url.includes('youtu.be/')) {
+              videoId = url.split('youtu.be/')[1]?.split('?')[0] || '';
+            }
+            if (videoId) {
+              coverImage = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
 
-      // Try fetching the actual page for metadata with timeout & error handling
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000);
-
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      // 2. Vimeo oEmbed
+      if (isVimeo && !title) {
+        try {
+          const vimeoOembedUrl = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`;
+          const vimeoRes = await fetch(vimeoOembedUrl, { signal: AbortSignal.timeout(3500) });
+          if (vimeoRes.ok) {
+            const vimeoData = await vimeoRes.json();
+            if (vimeoData.title) title = vimeoData.title;
+            if (vimeoData.author_name) authorName = vimeoData.author_name;
+            if (vimeoData.thumbnail_url) coverImage = vimeoData.thumbnail_url;
+            defaultType = 'Video';
           }
-        });
-        clearTimeout(timeout);
-        
-        if (response.ok) {
-          const html = await response.text();
-          const $ = cheerio.load(html);
-          
-          const title = $('meta[property="og:title"]').attr('content') || $('meta[name="twitter:title"]').attr('content') || $('title').text() || defaultTitle;
-          const description = $('meta[property="og:description"]').attr('content') || $('meta[name="twitter:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
-          
-          if (!coverImage) {
-            coverImage = $('meta[property="og:image:secure_url"]').attr('content') ||
-              $('meta[property="og:image"]').attr('content') ||
-              $('meta[name="twitter:image:src"]').attr('content') ||
-              $('meta[name="twitter:image"]').attr('content') ||
-              $('meta[itemprop="image"]').attr('content') ||
-              $('link[rel="image_src"]').attr('href') || '';
+        } catch {
+          // ignore
+        }
+      }
 
-            // Handle relative URLs for og:image
-            if (coverImage && !coverImage.startsWith('http')) {
-              try {
-                coverImage = new URL(coverImage, url).href;
-              } catch {
-                coverImage = '';
+      // 3. Twitter / X oEmbed
+      if (isTwitter && !title) {
+        try {
+          const twOembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
+          const twRes = await fetch(twOembedUrl, { signal: AbortSignal.timeout(3500) });
+          if (twRes.ok) {
+            const twData = await twRes.json();
+            if (twData.author_name) authorName = twData.author_name;
+            if (twData.html) {
+              const $tw = cheerio.load(twData.html);
+              const tweetText = $tw('p').text();
+              if (tweetText) {
+                title = tweetText.length > 100 ? `${tweetText.substring(0, 97)}...` : tweetText;
+              }
+            }
+            if (!title && twData.author_name) {
+              title = `Post by ${twData.author_name} on X`;
+            }
+            defaultType = 'Post';
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // 4. General OpenGraph & HTML scraping for articles, blogs, posts, websites
+      if (!title || !coverImage) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 4000);
+
+          const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+            }
+          });
+          clearTimeout(timeout);
+          
+          if (response.ok) {
+            const html = await response.text();
+            const $ = cheerio.load(html);
+            
+            if (!title) {
+              title = $('meta[property="og:title"]').attr('content') || 
+                      $('meta[name="twitter:title"]').attr('content') || 
+                      $('meta[name="title"]').attr('content') || 
+                      $('title').first().text() || 
+                      $('h1').first().text() || '';
+            }
+
+            if (!description) {
+              description = $('meta[property="og:description"]').attr('content') || 
+                            $('meta[name="twitter:description"]').attr('content') || 
+                            $('meta[name="description"]').attr('content') || '';
+            }
+
+            if (!authorName) {
+              authorName = $('meta[name="author"]').attr('content') || 
+                           $('meta[property="article:author"]').attr('content') || '';
+            }
+            
+            if (!coverImage) {
+              coverImage = $('meta[property="og:image:secure_url"]').attr('content') ||
+                $('meta[property="og:image"]').attr('content') ||
+                $('meta[name="twitter:image:src"]').attr('content') ||
+                $('meta[name="twitter:image"]').attr('content') ||
+                $('meta[itemprop="image"]').attr('content') ||
+                $('link[rel="image_src"]').attr('href') || '';
+
+              // Handle relative URLs for og:image
+              if (coverImage && !coverImage.startsWith('http')) {
+                try {
+                  coverImage = new URL(coverImage, url).href;
+                } catch {
+                  coverImage = '';
+                }
               }
             }
           }
-          
-          return res.json({
-            title: title.trim() || defaultTitle,
-            description: description.trim(),
-            coverImage: coverImage.trim(),
-            type: defaultType,
-          });
+        } catch (fetchError) {
+          console.warn(`HTML fetch skipped for ${url}:`, (fetchError as Error)?.message);
         }
-      } catch (fetchError) {
-        // Log friendly message without crashing
-        console.warn(`URL fetch skipped or failed gracefully for ${url}:`, (fetchError as Error)?.message);
+      }
+
+      // 5. Fallback to noembed.com if still no title
+      if (!title) {
+        try {
+          const noembedUrl = `https://noembed.com/embed?url=${encodeURIComponent(url)}`;
+          const noRes = await fetch(noembedUrl, { signal: AbortSignal.timeout(3000) });
+          if (noRes.ok) {
+            const noData = await noRes.json();
+            if (noData.title) title = noData.title;
+            if (!coverImage && noData.thumbnail_url) coverImage = noData.thumbnail_url;
+            if (!authorName && noData.author_name) authorName = noData.author_name;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Final cleanup
+      let cleanTitle = title.trim();
+      // Remove trailing website suffixes if overly noisy
+      cleanTitle = cleanTitle.replace(/\s*[-–|]\s*(YouTube|Twitter|X|Medium|GitHub)$/i, '').trim() || cleanTitle;
+
+      if (!cleanTitle) {
+        try {
+          const hostname = new URL(url).hostname.replace(/^www\./, '');
+          cleanTitle = hostname;
+        } catch {
+          cleanTitle = defaultType;
+        }
       }
 
       return res.json({
-        title: defaultTitle,
-        description: '',
+        title: cleanTitle,
+        description: description.trim(),
         coverImage: coverImage.trim(),
+        author: authorName.trim(),
         type: defaultType,
       });
 
