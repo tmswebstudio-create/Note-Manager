@@ -108,7 +108,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       console.error('Error signing in with Google', error);
       if (error.code === 'auth/unauthorized-domain') {
-        setAuthError("Domain not authorized in Firebase. Please add 'asia-southeast1.run.app' under Authentication > Settings > Authorized domains in Firebase Console.");
+        const currentDomain = window.location.hostname;
+        setAuthError(`Domain not authorized in Firebase. Please add '${currentDomain}' under Authentication > Settings > Authorized domains in Firebase Console.`);
       } else if (error.code === 'auth/popup-closed-by-user') {
         // User just closed popup, no error needed
       } else {
