@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { User, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleAuthProvider } from './firebase.ts';
 import { useStore } from '../store/useStore.ts';
 
@@ -64,6 +64,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
+    // Check for redirect result on mount
+    getRedirectResult(auth).catch((error) => {
+      console.error("Error with redirect sign in:", error);
+    });
+
     return () => unsubscribe();
   }, [setResources, setCategories]);
 
@@ -98,9 +103,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithPopup(auth, googleAuthProvider);
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user') {
-        console.log('Sign in cancelled by user.');
+        console.log('Sign in cancelled by user, falling back to redirect...');
+        await signInWithRedirect(auth, googleAuthProvider);
+      } else if (error.code === 'auth/cross-origin-opener-policy-failed' || error.code === 'auth/internal-error') {
+        console.log('Popup failed due to COOP/security restrictions, falling back to redirect...');
+        await signInWithRedirect(auth, googleAuthProvider);
       } else {
         console.error('Error signing in with Google', error);
+        // Fallback for any other unexpected popup blockage in iframe
+        await signInWithRedirect(auth, googleAuthProvider);
       }
     }
   };
