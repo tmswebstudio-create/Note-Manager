@@ -4,7 +4,7 @@ import { ResourceCard } from './ResourceCard';
 import { Resource, Category } from '../types';
 import { 
   Layers, Plus, FolderPlus, Edit2, Trash2, ArrowLeft, 
-  FolderTree, Play, FileText, ChevronRight, Sparkles 
+  FolderTree, Play, FileText, ChevronRight, Sparkles, GripVertical 
 } from 'lucide-react';
 import { cn } from './Sidebar';
 import { CategoryIcon } from './CategoryIcon';
@@ -62,6 +62,216 @@ function SortableResourceCard({
   );
 }
 
+function SortableCategoryCard({
+  cat,
+  count,
+  subs,
+  learningResources,
+  setActiveCategory,
+  openAddSubcategoryModal,
+  openEditCategoryModal,
+  confirmDeleteId,
+  setConfirmDeleteId,
+  deleteCategory,
+}: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: cat.id });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 30 : undefined,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={() => setActiveCategory(cat.id, null)}
+      className="group relative bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/90 dark:border-slate-800/90 hover:border-indigo-400 dark:hover:border-indigo-600/60 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        {/* Top bar with icon, title & action controls */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              {...attributes}
+              {...listeners}
+              onClick={(e) => e.stopPropagation()}
+              className="p-1 -ml-1 text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 hover:text-slate-500 dark:hover:text-slate-400 cursor-grab active:cursor-grabbing transition-opacity shrink-0"
+              title="Drag to reorder category"
+            >
+              <GripVertical size={14} />
+            </div>
+
+            <CategoryIcon 
+              icon={cat.icon} 
+              name={cat.name} 
+              isSubcategory={false} 
+              size="md" 
+            />
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                {cat.name}
+              </h3>
+              <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                {count} {count === 1 ? 'resource' : 'resources'}
+              </span>
+            </div>
+          </div>
+
+          {/* Quick edit / add subcategory */}
+          <div 
+            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => openAddSubcategoryModal(cat.id, cat.name)}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-600 rounded-md"
+              title="Add sub-category"
+            >
+              <FolderPlus size={13} />
+            </button>
+            <button
+              onClick={() => openEditCategoryModal(cat)}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md"
+              title="Edit category"
+            >
+              <Edit2 size={13} />
+            </button>
+            {confirmDeleteId === cat.id ? (
+              <button
+                onClick={() => deleteCategory(cat.id)}
+                className="px-1.5 py-0.5 bg-red-500 text-white rounded text-[10px] font-bold"
+                title="Confirm delete"
+              >
+                Del
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmDeleteId(cat.id)}
+                className="p-1 hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 rounded-md"
+                title="Delete category"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Subcategories tags preview */}
+        {subs.length > 0 && (
+          <div className="mt-3.5 flex flex-wrap gap-1.5">
+            {subs.slice(0, 3).map((sub: Category) => {
+              const subCount = learningResources.filter((r: Resource) => r.categoryId === cat.id && r.subcategoryId === sub.id).length;
+              return (
+                <span
+                  key={sub.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveCategory(cat.id, sub.id);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 text-slate-600 dark:text-slate-400 rounded-md text-[10px] font-medium transition-colors"
+                >
+                  <CategoryIcon icon={sub.icon} name={sub.name} isSubcategory={true} size="xs" />
+                  <span>{sub.name}</span>
+                  <span className="opacity-60 text-[9px]">({subCount})</span>
+                </span>
+              );
+            })}
+            {subs.length > 3 && (
+              <span className="text-[10px] font-medium text-slate-400 self-center">
+                +{subs.length - 3} more
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-semibold text-slate-400 dark:text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+        <span className="flex items-center gap-1">
+          <FolderTree size={12} />
+          <span>{subs.length} sub-folder{subs.length === 1 ? '' : 's'}</span>
+        </span>
+        <span className="flex items-center gap-0.5 text-indigo-500 font-bold">
+          Explore <ChevronRight size={13} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SortableSubcategoryTab({
+  sub,
+  count,
+  isSelected,
+  onClick,
+}: {
+  key?: Key;
+  sub: Category;
+  count: number;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: sub.id });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="inline-flex items-center group/tab">
+      <button
+        onClick={onClick}
+        className={cn(
+          "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5",
+          isSelected
+            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+        )}
+      >
+        <span
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+          className="cursor-grab active:cursor-grabbing opacity-30 group-hover/tab:opacity-100 -ml-1 mr-0.5 hover:text-indigo-400"
+          title="Drag to reorder subcategory"
+        >
+          <GripVertical size={11} />
+        </span>
+        <CategoryIcon 
+          icon={sub.icon} 
+          name={sub.name} 
+          isSubcategory={true} 
+          size="xs" 
+          isActive={isSelected}
+        />
+        <span>{sub.name}</span>
+        <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+          {count}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export function ResourceGrid({ 
   onEdit, 
   onAddResource 
@@ -76,11 +286,12 @@ export function ResourceGrid({
     activeSubcategoryId, 
     setActiveCategory,
     setActiveSubcategory, 
-    setActiveView,
+    setActiveView, 
     activeView, 
     searchQuery,
     deleteCategory,
-    reorderResources
+    reorderResources,
+    reorderCategories
   } = useStore();
 
   const sensors = useSensors(
@@ -98,6 +309,20 @@ export function ResourceGrid({
     const { active, over } = event;
     if (over && active.id !== over.id) {
       reorderResources(String(active.id), String(over.id), filtered.map(r => r.id));
+    }
+  };
+
+  const handleCategoryDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      reorderCategories(String(active.id), String(over.id), parentCategories.map(c => c.id));
+    }
+  };
+
+  const handleSubcategoryTabDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      reorderCategories(String(active.id), String(over.id), currentSubcategories.map(s => s.id));
     }
   };
 
@@ -124,7 +349,9 @@ export function ResourceGrid({
 
   // Parent categories strictly for resources/playlists (excluding bookmark categories)
   const parentCategories = useMemo(() => {
-    return categories.filter(c => !c.parentId && isResourceCategory(c, categories, resources));
+    return categories
+      .filter(c => !c.parentId && isResourceCategory(c, categories, resources))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [categories, resources]);
 
   // Subcategories map strictly for resources/playlists (excluding bookmark subcategories)
@@ -135,6 +362,9 @@ export function ResourceGrid({
         if (!map[c.parentId]) map[c.parentId] = [];
         map[c.parentId].push(c);
       }
+    });
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     });
     return map;
   }, [categories, resources]);
@@ -244,7 +474,7 @@ export function ResourceGrid({
             </button>
           </div>
 
-          {/* Grid of Categories Cards */}
+          {/* Grid of Categories Cards with Drag-and-Drop */}
           {parentCategories.length === 0 ? (
             <div 
               onClick={openAddCategoryModal}
@@ -257,114 +487,34 @@ export function ResourceGrid({
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Click here to create your first learning category with custom icon.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-              {parentCategories.map(cat => {
-                const count = learningResources.filter(r => r.categoryId === cat.id).length;
-                const subs = subcategoriesMap[cat.id] || [];
-
-                return (
-                  <div
-                    key={cat.id}
-                    onClick={() => setActiveCategory(cat.id, null)}
-                    className="group relative bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/90 dark:border-slate-800/90 hover:border-indigo-400 dark:hover:border-indigo-600/60 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Top bar with icon, title & action controls */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <CategoryIcon 
-                            icon={cat.icon} 
-                            name={cat.name} 
-                            isSubcategory={false} 
-                            size="md" 
-                          />
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                              {cat.name}
-                            </h3>
-                            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                              {count} {count === 1 ? 'resource' : 'resources'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Quick edit / add subcategory */}
-                        <div 
-                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <button
-                            onClick={() => openAddSubcategoryModal(cat.id, cat.name)}
-                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-indigo-600 rounded-md"
-                            title="Add sub-category"
-                          >
-                            <FolderPlus size={13} />
-                          </button>
-                          <button
-                            onClick={() => openEditCategoryModal(cat)}
-                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md"
-                            title="Edit category"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          {confirmDeleteId === cat.id ? (
-                            <button
-                              onClick={() => deleteCategory(cat.id)}
-                              className="px-1.5 py-0.5 bg-red-500 text-white rounded text-[10px] font-bold"
-                              title="Confirm delete"
-                            >
-                              Del
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setConfirmDeleteId(cat.id)}
-                              className="p-1 hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500 rounded-md"
-                              title="Delete category"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Subcategories tags preview */}
-                      {subs.length > 0 && (
-                        <div className="mt-3.5 flex flex-wrap gap-1.5">
-                          {subs.slice(0, 3).map(sub => {
-                            const subCount = learningResources.filter(r => r.categoryId === cat.id && r.subcategoryId === sub.id).length;
-                            return (
-                              <span
-                                key={sub.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveCategory(cat.id, sub.id);
-                                }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 hover:text-indigo-600 text-slate-600 dark:text-slate-400 rounded-md text-[10px] font-medium transition-colors"
-                              >
-                                <CategoryIcon icon={sub.icon} name={sub.name} isSubcategory={true} size="xs" />
-                                <span>{sub.name}</span>
-                                <span className="opacity-60 text-[9px]">({subCount})</span>
-                              </span>
-                            );
-                          })}
-                          {subs.length > 3 && (
-                            <span className="text-[10px] font-medium text-slate-400 self-center">
-                              +{subs.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer Explore Link */}
-                    <div className="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[11px] font-semibold text-slate-400 dark:text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      <span>View category</span>
-                      <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleCategoryDragEnd}
+            >
+              <SortableContext
+                items={parentCategories.map(c => c.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                  {parentCategories.map(cat => (
+                    <SortableCategoryCard
+                      key={cat.id}
+                      cat={cat}
+                      count={learningResources.filter(r => r.categoryId === cat.id).length}
+                      subs={subcategoriesMap[cat.id] || []}
+                      learningResources={learningResources}
+                      setActiveCategory={setActiveCategory}
+                      openAddSubcategoryModal={openAddSubcategoryModal}
+                      openEditCategoryModal={openEditCategoryModal}
+                      confirmDeleteId={confirmDeleteId}
+                      setConfirmDeleteId={setConfirmDeleteId}
+                      deleteCategory={deleteCategory}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </section>
       )}
@@ -443,7 +593,7 @@ export function ResourceGrid({
             </div>
           </div>
 
-          {/* Sub-category Filter Tabs */}
+          {/* Sub-category Filter Tabs with Drag-and-Drop Reordering */}
           {currentSubcategories.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               <button
@@ -458,34 +608,32 @@ export function ResourceGrid({
                 All in {activeCategory.name} ({learningResources.filter(r => r.categoryId === activeCategoryId).length})
               </button>
 
-              {currentSubcategories.map(sub => {
-                const count = learningResources.filter(r => r.categoryId === activeCategoryId && r.subcategoryId === sub.id).length;
-                const isSelected = activeSubcategoryId === sub.id;
-                return (
-                  <button
-                    key={sub.id}
-                    onClick={() => setActiveSubcategory(isSelected ? null : sub.id)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors flex items-center gap-1.5",
-                      isSelected
-                        ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                    )}
-                  >
-                    <CategoryIcon 
-                      icon={sub.icon} 
-                      name={sub.name} 
-                      isSubcategory={true} 
-                      size="xs" 
-                      isActive={isSelected}
-                    />
-                    <span>{sub.name}</span>
-                    <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleSubcategoryTabDragEnd}
+              >
+                <SortableContext
+                  items={currentSubcategories.map(s => s.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {currentSubcategories.map(sub => {
+                      const count = learningResources.filter(r => r.categoryId === activeCategoryId && r.subcategoryId === sub.id).length;
+                      const isSelected = activeSubcategoryId === sub.id;
+                      return (
+                        <SortableSubcategoryTab
+                          key={sub.id}
+                          sub={sub}
+                          count={count}
+                          isSelected={isSelected}
+                          onClick={() => setActiveSubcategory(isSelected ? null : sub.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </div>
           )}
         </div>

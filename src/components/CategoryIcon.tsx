@@ -66,20 +66,29 @@ export function CategoryIcon({
       );
     }
 
-    // Image URL rendering
-    if ((cleanIcon.startsWith('http://') || cleanIcon.startsWith('https://') || cleanIcon.startsWith('data:')) && !hasError) {
+    // Image URL / JPG / Data URL rendering
+    let imageSrc = cleanIcon;
+    if (!imageSrc.startsWith('http://') && !imageSrc.startsWith('https://') && !imageSrc.startsWith('data:') && !imageSrc.startsWith('blob:') && !imageSrc.startsWith('/')) {
+      if (imageSrc.includes('/') || imageSrc.match(/\.(jpg|jpeg|png|svg|webp|ico|gif)($|\?)/i)) {
+        imageSrc = 'https://' + imageSrc;
+      }
+    }
+
+    const isImage = (imageSrc.startsWith('http://') || imageSrc.startsWith('https://') || imageSrc.startsWith('data:') || imageSrc.startsWith('blob:') || imageSrc.startsWith('/')) && !hasError;
+
+    if (isImage) {
       return (
         <div 
           className={cn(
-            "inline-flex items-center justify-center shrink-0 rounded overflow-hidden",
+            "inline-flex items-center justify-center shrink-0 rounded overflow-hidden bg-slate-100 dark:bg-slate-800/80",
             sizeClasses[size],
             className
           )}
         >
           <img
-            src={cleanIcon}
+            src={imageSrc}
             alt={name ? `${name} icon` : 'icon'}
-            className="w-full h-full object-contain rounded"
+            className="w-full h-full object-cover rounded"
             referrerPolicy="no-referrer"
             onError={() => setHasError(true)}
           />

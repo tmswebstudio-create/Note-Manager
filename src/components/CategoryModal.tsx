@@ -1,9 +1,9 @@
-import { useState, useMemo, type FormEvent } from 'react';
+import { useState, useMemo, useRef, type FormEvent, type ChangeEvent, type DragEvent } from 'react';
 import { useStore } from '../store/useStore';
 import { Category } from '../types';
 import { 
   X, Folder, Tag, Link2, Sparkles, AlertCircle, Check, 
-  Search, Grid, LayoutGrid, Image as ImageIcon 
+  Search, Grid, LayoutGrid, Image as ImageIcon, Upload, FileImage, CheckCircle2 
 } from 'lucide-react';
 import { cn } from './Sidebar';
 import { ALL_ICONS, ICON_CATEGORIES, IconItem } from './iconRegistry';
@@ -41,12 +41,101 @@ export function CategoryModal({
     return '';
   }, [parentName, editingCategory, categories]);
 
+  const initialIsCustom = Boolean(
+    editingCategory?.icon && 
+    (editingCategory.icon.startsWith('http') || 
+     editingCategory.icon.startsWith('data:') || 
+     editingCategory.icon.startsWith('blob:') ||
+     editingCategory.icon.match(/\.(jpg|jpeg|png|svg|webp|ico|gif)($|\?)/i))
+  );
+
   const [name, setName] = useState(editingCategory?.name || '');
   const [selectedIcon, setSelectedIcon] = useState(editingCategory?.icon || '');
-  const [activeTab, setActiveTab] = useState<'library' | 'custom'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'custom'>(initialIsCustom ? 'custom' : 'library');
   const [iconSearch, setIconSearch] = useState('');
   const [selectedIconCategory, setSelectedIconCategory] = useState('All');
   const [error, setError] = useState('');
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleProcessImageFile = (file: File) => {
+    if (!file) return;
+    const isImage = file.type.startsWith('image/') || file.name.match(/\.(jpg|jpeg|png|svg|webp|ico|gif)$/i);
+    if (!isImage) {
+      setError('Please choose a valid image file (JPG, PNG, SVG, WebP)');
+      return;
+    }
+
+    setUploadedFileName(file.name);
+    setError('');
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rawResult = e.target?.result as string;
+      if (!rawResult) return;
+
+      // For SVG, keep original data
+      if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+        setSelectedIcon(rawResult);
+        return;
+      }
+
+      // For JPG / PNG / raster formats, optimize dimension to max 128x128 for crisp, fast local persistence
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 128;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = Math.max(width, 16);
+        canvas.height = Math.max(height, 16);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const optimizedData = canvas.toDataURL(mime, 0.9);
+          setSelectedIcon(optimizedData);
+        } else {
+          setSelectedIcon(rawResult);
+        }
+      };
+      img.onerror = () => {
+        setSelectedIcon(rawResult);
+      };
+      img.src = rawResult;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleProcessImageFile(file);
+    }
+  };
+
+  const handleFileDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleProcessImageFile(file);
+    }
+  };
 
   // Filter icon library
   const filteredIcons = useMemo(() => {
@@ -212,8 +301,8 @@ export function CategoryModal({
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   )}
                 >
-                  <Link2 size={14} />
-                  <span>Custom URL / Link</span>
+                  <Upload size={14} />
+                  <span>Icon Link & JPG Upload</span>
                 </button>
               </div>
 
@@ -272,7 +361,10 @@ export function CategoryModal({
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => setSelectedIcon(item.id)}
+                          onClick={() => {
+                            setSelectedIcon(item.id);
+                            setUploadedFileName(null);
+                          }}
                           title={`${item.name} (${item.category})`}
                           className={cn(
                             "flex flex-col items-center justify-center p-2 rounded-xl aspect-square transition-all group relative border",
@@ -302,36 +394,116 @@ export function CategoryModal({
 
                     {filteredIcons.length === 0 && (
                       <div className="col-span-full py-8 text-center text-xs text-slate-400">
-                        No icons found matching "{iconSearch}". You can also paste a custom URL in the "Custom URL" tab!
+                        No icons found matching "{iconSearch}". You can also upload a JPG or paste a link in the "Icon Link & JPG Upload" tab!
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Tab 2: Custom URL / Image Link */}
+              {/* Tab 2: Custom URL / Image Link & JPG Upload */}
               {activeTab === 'custom' && (
-                <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 animate-in fade-in">
+                <div className="space-y-4 p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 animate-in fade-in">
+                  {/* File Upload / Drag-and-Drop Area */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                      <span>Upload Icon File (JPG, JPEG, PNG, SVG)</span>
+                      <span className="text-[11px] font-normal text-slate-400">Local or custom image</span>
+                    </label>
+                    <input 
+                      ref={fileInputRef}
+                      type="file" 
+                      accept="image/jpeg,image/jpg,image/png,image/svg+xml,image/webp,image/x-icon"
+                      onChange={handleFileInputChange}
+                      className="hidden"
+                    />
+
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                      onDragLeave={() => setIsDraggingFile(false)}
+                      onDrop={handleFileDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        "border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-1.5 group",
+                        isDraggingFile
+                          ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40"
+                          : "border-slate-300 dark:border-slate-700 bg-white/70 dark:bg-slate-900/70 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/20"
+                      )}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <Upload size={18} />
+                      </div>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        {isDraggingFile ? 'Drop image here' : 'Click to browse or drop JPG / PNG file'}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Supports .jpg, .jpeg, .png, .svg, .webp (automatically optimized)
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="relative flex items-center justify-center">
+                    <div className="border-t border-slate-200 dark:border-slate-700/80 w-full" />
+                    <span className="bg-slate-50 dark:bg-slate-850 px-2 text-[10px] uppercase font-bold text-slate-400 tracking-wider absolute">
+                      or paste image link
+                    </span>
+                  </div>
+
+                  {/* Icon Image Link URL input */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Direct Icon Image Link (SVG, PNG, WebP)
+                      Direct Icon Image Link
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        <Link2 size={16} />
+                        <Link2 size={15} />
                       </div>
                       <input
-                        type="url"
-                        value={selectedIcon.startsWith('http') ? selectedIcon : ''}
-                        onChange={(e) => setSelectedIcon(e.target.value)}
-                        placeholder="https://example.com/icon.svg or https://cdn.simpleicons.org/..."
-                        className="w-full pl-9 pr-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        type="text"
+                        value={selectedIcon && !selectedIcon.startsWith('data:') && !selectedIcon.startsWith('lucide:') ? selectedIcon : ''}
+                        onChange={(e) => {
+                          setSelectedIcon(e.target.value);
+                          setUploadedFileName(null);
+                        }}
+                        placeholder="https://example.com/logo.jpg or https://cdn.simpleicons.org/..."
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      Paste any web image URL (.jpg, .jpeg, .png, .svg) or icon CDN link.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Tip: You can use direct links from <strong className="text-slate-700 dark:text-slate-300">SimpleIcons</strong> (e.g. <code className="text-[10px] bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">https://cdn.simpleicons.org/github/181717</code>) or any web-hosted SVG or PNG image.
-                  </p>
+
+                  {/* Active Custom Icon Indicator */}
+                  {selectedIcon && (
+                    <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-900/60 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                          <CategoryIcon icon={selectedIcon} name={name} size="md" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5 truncate">
+                            <CheckCircle2 size={13} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <span>{uploadedFileName ? `JPG/Image: ${uploadedFileName}` : 'Custom icon ready'}</span>
+                          </p>
+                          <p className="text-[10px] text-indigo-700/80 dark:text-indigo-400 truncate font-mono">
+                            {selectedIcon.startsWith('data:') ? 'Local base64 image data' : selectedIcon}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedIcon('');
+                          setUploadedFileName(null);
+                        }}
+                        className="text-xs text-red-500 hover:text-red-600 hover:underline font-medium shrink-0 px-2 py-1"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

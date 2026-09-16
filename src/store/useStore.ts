@@ -26,7 +26,7 @@ interface AppState {
   addSubcategory: (parentId: string, name: string, icon?: string, type?: 'resource' | 'bookmark') => string;
   updateCategory: (id: string, updates: string | { name?: string; icon?: string; type?: 'resource' | 'bookmark' }, icon?: string) => void;
   deleteCategory: (id: string) => void;
-  reorderCategories: (startIndex: number, endIndex: number) => void;
+  reorderCategories: (activeIdOrStartIndex: string | number, overIdOrEndIndex: string | number, scopeIds?: string[]) => void;
   
   setActiveCategory: (id: string | null, subcategoryId?: string | null) => void;
   setActiveSubcategory: (subcategoryId: string | null) => void;
@@ -236,11 +236,62 @@ export const useStore = create<AppState>()(
         }
       }),
 
-      reorderCategories: (startIndex, endIndex) => set((state) => {
-        const result = Array.from(state.categories);
-        const [removed] = result.splice(startIndex, 1);
-        result.splice(endIndex, 0, removed);
-        return { categories: result };
+      reorderCategories: (activeIdOrStartIndex, overIdOrEndIndex, scopeIds) => set((state) => {
+        if (typeof activeIdOrStartIndex === 'number' && typeof overIdOrEndIndex === 'number') {
+          const result = Array.from(state.categories);
+          const [removed] = result.splice(activeIdOrStartIndex, 1);
+          result.splice(overIdOrEndIndex, 0, removed);
+          result.forEach((c, idx) => {
+            c.order = idx;
+          });
+          return { categories: result };
+        }
+
+        const activeId = String(activeIdOrStartIndex);
+        const overId = String(overIdOrEndIndex);
+        if (activeId === overId) return state;
+
+        if (scopeIds && scopeIds.length > 0) {
+          const oldIndex = scopeIds.indexOf(activeId);
+          const newIndex = scopeIds.indexOf(overId);
+          if (oldIndex === -1 || newIndex === -1) return state;
+
+          const newScopeIds = Array.from(scopeIds);
+          const [removed] = newScopeIds.splice(oldIndex, 1);
+          newScopeIds.splice(newIndex, 0, removed);
+
+          const orderMap = new Map<string, number>();
+          newScopeIds.forEach((id, idx) => {
+            orderMap.set(id, idx);
+          });
+
+          const scopeCategories = newScopeIds
+            .map(id => state.categories.find(c => c.id === id))
+            .filter((c): c is Category => Boolean(c))
+            .map(c => ({ ...c, order: orderMap.get(c.id) ?? c.order }));
+
+          let scopeIndex = 0;
+          const updatedCategories = state.categories.map(c => {
+            if (orderMap.has(c.id)) {
+              return scopeCategories[scopeIndex++];
+            }
+            return c;
+          });
+
+          return { categories: updatedCategories };
+        } else {
+          const oldIndex = state.categories.findIndex(c => c.id === activeId);
+          const newIndex = state.categories.findIndex(c => c.id === overId);
+          if (oldIndex === -1 || newIndex === -1) return state;
+
+          const result = Array.from(state.categories);
+          const [removed] = result.splice(oldIndex, 1);
+          result.splice(newIndex, 0, removed);
+          result.forEach((c, idx) => {
+            c.order = idx;
+          });
+          return { categories: result };
+        }
       }),
 
       setActiveCategory: (id, subcategoryId = null) => set({ 

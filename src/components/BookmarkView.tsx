@@ -220,8 +220,72 @@ function SortableBookmarkItem({
   );
 }
 
+function SortableBookmarkSubcategoryTab({
+  sub,
+  count,
+  isSelected,
+  onClick,
+}: {
+  key?: Key;
+  sub: Category;
+  count: number;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: sub.id });
+
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="inline-flex items-center group/tab">
+      <button
+        onClick={onClick}
+        className={cn(
+          "px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5",
+          isSelected
+            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+        )}
+      >
+        <span
+          {...attributes}
+          {...listeners}
+          onClick={(e) => e.stopPropagation()}
+          className="cursor-grab active:cursor-grabbing opacity-30 group-hover/tab:opacity-100 -ml-1 mr-0.5 hover:text-indigo-400"
+          title="Drag to reorder subcategory"
+        >
+          <GripVertical size={11} />
+        </span>
+        <CategoryIcon 
+          icon={sub.icon} 
+          name={sub.name} 
+          isSubcategory={true} 
+          size="xs" 
+          isActive={isSelected}
+        />
+        <span>{sub.name}</span>
+        <span className={cn("text-[10px] px-1 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+          {count}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void, onAdd?: (defaultCategoryId?: string, defaultSubcategoryId?: string) => void }) {
-  const { resources, categories, searchQuery, addSubcategory, reorderResources } = useStore();
+  const { resources, categories, searchQuery, addSubcategory, reorderResources, reorderCategories } = useStore();
   
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -238,6 +302,13 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
     const { active, over } = event;
     if (over && active.id !== over.id) {
       reorderResources(String(active.id), String(over.id), scopeIds);
+    }
+  };
+
+  const handleSubcategoryDragEnd = (event: DragEndEvent, scopeIds: string[]) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      reorderCategories(String(active.id), String(over.id), scopeIds);
     }
   };
 
@@ -311,7 +382,11 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
     );
   }
 
-  const groupedEntries: [string, Resource[]][] = Object.entries(grouped);
+  const groupedEntries: [string, Resource[]][] = (Object.entries(grouped) as [string, Resource[]][]).sort(([nameA], [nameB]) => {
+    const catA = categories.find(c => c.name === nameA && !c.parentId);
+    const catB = categories.find(c => c.name === nameB && !c.parentId);
+    return (catA?.order ?? 0) - (catB?.order ?? 0);
+  });
 
   return (
     <div className="p-4 sm:p-8 space-y-10 pb-32">
@@ -434,7 +509,7 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                 </div>
               </div>
 
-              {/* Sub-category Filter Tabs */}
+              {/* Sub-category Filter Tabs with Drag-and-Drop */}
               {subcategories.length > 0 && categoryId && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                   <button
@@ -449,37 +524,33 @@ export function BookmarkView({ onEdit, onAdd }: { onEdit: (r: Resource) => void,
                     All ({items.length})
                   </button>
 
-                  {subcategories.map(sub => {
-                    const count = items.filter(i => i.subcategoryId === sub.id).length;
-                    const isSelected = activeSubId === sub.id;
-                    return (
-                      <button
-                        key={sub.id}
-                        onClick={() => setSelectedSubcategories(prev => ({ 
-                          ...prev, 
-                          [categoryId]: isSelected ? null : sub.id 
-                        }))}
-                        className={cn(
-                          "px-2.5 py-1 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5",
-                          isSelected
-                            ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                        )}
-                      >
-                        <CategoryIcon 
-                          icon={sub.icon} 
-                          name={sub.name} 
-                          isSubcategory={true} 
-                          size="xs" 
-                          isActive={isSelected}
-                        />
-                        <span>{sub.name}</span>
-                        <span className={cn("text-[10px] px-1 rounded-full", isSelected ? "bg-indigo-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  <DndContext
+                    id={`dnd-subcategories-${categoryId}`}
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={(event) => handleSubcategoryDragEnd(event, subcategories.map(s => s.id))}
+                  >
+                    <SortableContext items={subcategories.map(s => s.id)} strategy={rectSortingStrategy}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {subcategories.map(sub => {
+                          const count = items.filter(i => i.subcategoryId === sub.id).length;
+                          const isSelected = activeSubId === sub.id;
+                          return (
+                            <SortableBookmarkSubcategoryTab
+                              key={sub.id}
+                              sub={sub}
+                              count={count}
+                              isSelected={isSelected}
+                              onClick={() => setSelectedSubcategories(prev => ({ 
+                                ...prev, 
+                                [categoryId]: isSelected ? null : sub.id 
+                              }))}
+                            />
+                          );
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 </div>
               )}
 

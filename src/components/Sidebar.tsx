@@ -33,6 +33,153 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function SortableSubcategoryItem({
+  sub,
+  categoryId,
+  isSubActive,
+  setActiveCategory,
+  setIsMobileOpen,
+  onEditCategory,
+  deleteCategory,
+}: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: sub.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 0,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="group/sub flex items-center relative my-0.5">
+      <div 
+        {...attributes} 
+        {...listeners}
+        className="absolute -left-3.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-300 dark:text-slate-600 opacity-0 group-hover/sub:opacity-100 cursor-grab active:cursor-grabbing hover:text-slate-500 dark:hover:text-slate-400 transition-opacity z-10"
+        title="Drag to reorder subcategory"
+      >
+        <GripVertical size={11} />
+      </div>
+
+      <button
+        onClick={() => {
+          setActiveCategory(categoryId, sub.id);
+          setIsMobileOpen(false);
+        }}
+        className={cn(
+          "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg transition-colors text-left",
+          isSubActive 
+            ? "bg-indigo-100/70 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold"
+            : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-800 dark:hover:text-slate-200"
+        )}
+        title={sub.name}
+      >
+        <CategoryIcon 
+          icon={sub.icon} 
+          name={sub.name} 
+          isSubcategory={true} 
+          isActive={isSubActive}
+          size="xs"
+        />
+        <span className="truncate flex-1">{sub.name}</span>
+        
+        <div className="ml-auto hidden group-hover/sub:flex items-center gap-1">
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditCategory(sub);
+            }}
+            className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-600"
+            title="Edit Sub-category & Icon"
+          >
+            <Edit2 size={11} />
+          </div>
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteCategory(sub.id);
+            }}
+            className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-slate-400 hover:text-red-500"
+            title="Delete sub-category"
+          >
+            <Trash2 size={11} />
+          </div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function SubcategoryList({
+  subcategories,
+  category,
+  activeCategoryId,
+  activeSubcategoryId,
+  activeView,
+  setActiveCategory,
+  setIsMobileOpen,
+  onEditCategory,
+  deleteCategory,
+  onReorderSubcategories
+}: any) {
+  const subSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 4,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleSubDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      onReorderSubcategories(String(active.id), String(over.id), subcategories.map((s: Category) => s.id));
+    }
+  };
+
+  return (
+    <DndContext
+      sensors={subSensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleSubDragEnd}
+    >
+      <SortableContext
+        items={subcategories.map((s: Category) => s.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="pl-6 pr-1 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-800 ml-5 my-0.5">
+          {subcategories.map((sub: Category) => {
+            const isSubActive = activeCategoryId === category.id && activeSubcategoryId === sub.id && activeView === 'category';
+            return (
+              <SortableSubcategoryItem
+                key={sub.id}
+                sub={sub}
+                categoryId={category.id}
+                isSubActive={isSubActive}
+                setActiveCategory={setActiveCategory}
+                setIsMobileOpen={setIsMobileOpen}
+                onEditCategory={onEditCategory}
+                deleteCategory={deleteCategory}
+              />
+            );
+          })}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
 function SortableCategoryItem({ 
   category, 
   subcategories,
@@ -44,6 +191,7 @@ function SortableCategoryItem({
   onEditCategory,
   deleteCategory,
   onAddSubcategory,
+  onReorderSubcategories,
   isSidebarCollapsed
 }: any) {
   const {
@@ -193,60 +341,18 @@ function SortableCategoryItem({
 
       {/* Render Subcategories list */}
       {!isSidebarCollapsed && isExpanded && hasSubcategories && (
-        <div className="pl-6 pr-1 py-0.5 space-y-0.5 border-l-2 border-slate-200 dark:border-slate-800 ml-5 my-0.5">
-          {subcategories.map((sub: Category) => {
-            const isSubActive = activeCategoryId === category.id && activeSubcategoryId === sub.id && activeView === 'category';
-            return (
-              <div key={sub.id} className="group/sub flex items-center">
-                <button
-                  onClick={() => {
-                    setActiveCategory(category.id, sub.id);
-                    setIsMobileOpen(false);
-                  }}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg transition-colors text-left",
-                    isSubActive 
-                      ? "bg-indigo-100/70 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold"
-                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-800 dark:hover:text-slate-200"
-                  )}
-                  title={sub.name}
-                >
-                  <CategoryIcon 
-                    icon={sub.icon} 
-                    name={sub.name} 
-                    isSubcategory={true} 
-                    isActive={isSubActive}
-                    size="xs"
-                  />
-                  <span className="truncate flex-1">{sub.name}</span>
-                  
-                  <div className="ml-auto hidden group-hover/sub:flex items-center gap-1">
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditCategory(sub);
-                      }}
-                      className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-600"
-                      title="Edit Sub-category & Icon"
-                    >
-                      <Edit2 size={11} />
-                    </div>
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteCategory(sub.id);
-                      }}
-                      className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-slate-400 hover:text-red-500"
-                      title="Delete sub-category"
-                    >
-                      <Trash2 size={11} />
-                    </div>
-                  </div>
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        <SubcategoryList
+          subcategories={subcategories}
+          category={category}
+          activeCategoryId={activeCategoryId}
+          activeSubcategoryId={activeSubcategoryId}
+          activeView={activeView}
+          setActiveCategory={setActiveCategory}
+          setIsMobileOpen={setIsMobileOpen}
+          onEditCategory={onEditCategory}
+          deleteCategory={deleteCategory}
+          onReorderSubcategories={onReorderSubcategories}
+        />
       )}
     </div>
   );
@@ -308,7 +414,9 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
 
   // Separate parent categories from subcategories (strictly for learning resources, excluding bookmarks)
   const parentCategories = useMemo(() => {
-    return categories.filter(c => !c.parentId && isResourceCategory(c, categories, resources));
+    return categories
+      .filter(c => !c.parentId && isResourceCategory(c, categories, resources))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [categories, resources]);
   
   const subcategoriesMap = useMemo(() => {
@@ -319,6 +427,9 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
         map[c.parentId].push(c);
       }
     });
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
     return map;
   }, [categories, resources]);
 
@@ -326,9 +437,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
     const { active, over } = event;
     
     if (over && active.id !== over.id) {
-      const oldIndex = parentCategories.findIndex((cat) => cat.id === active.id);
-      const newIndex = parentCategories.findIndex((cat) => cat.id === over.id);
-      reorderCategories(oldIndex, newIndex);
+      reorderCategories(String(active.id), String(over.id), parentCategories.map(c => c.id));
     }
   };
 
@@ -567,6 +676,9 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
                         onEditCategory={openEditCategoryModal}
                         deleteCategory={deleteCategory}
                         onAddSubcategory={openAddSubcategoryModal}
+                        onReorderSubcategories={(activeId: string, overId: string, scopeIds: string[]) => {
+                          reorderCategories(activeId, overId, scopeIds);
+                        }}
                         isSidebarCollapsed={isSidebarCollapsed}
                       />
                     ))}

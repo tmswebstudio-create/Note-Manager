@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import { Resource } from '../types';
 import { 
   X, Loader2, Link as LinkIcon, AlertCircle, Sparkles, 
-  Globe, FolderTree, Plus, CheckCircle2, RefreshCw 
+  Globe, FolderTree, Plus, CheckCircle2, RefreshCw, Upload 
 } from 'lucide-react';
 import { getFaviconUrl, getDuckDuckGoFaviconUrl, normalizeUrl, fetchUrlMetadata } from '../utils/url-helpers';
 import { isBookmarkCategory } from '../utils/category-helpers';
@@ -365,25 +365,44 @@ export function AddBookmarkModal({ onClose, editResource, defaultCategoryId, def
               </div>
             )}
 
-            {/* Favicon / Icon URL */}
+            {/* Favicon / Icon URL or JPG */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                Custom Favicon / Icon URL <span className="text-[11px] font-normal text-slate-400 lowercase">(optional)</span>
+                <span>Icon Link or JPG Image <span className="text-[11px] font-normal text-slate-400 lowercase">(optional)</span></span>
+                <label className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1">
+                  <Upload size={12} />
+                  <span>Upload JPG/PNG</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/svg+xml,image/webp,image/x-icon"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (re) => {
+                        const res = re.target?.result as string;
+                        if (res) setFaviconUrl(res);
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
               </label>
               <div className="flex items-center gap-3">
                 <input
                   type="text"
-                  placeholder="https://... or leave blank for auto favicon"
+                  placeholder="https://... (JPG, PNG, SVG link) or upload file"
                   value={faviconUrl}
                   onChange={e => setFaviconUrl(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
                 />
                 {previewIcon && (
-                  <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800">
+                  <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-800 overflow-hidden">
                     <img 
                       src={previewIcon} 
                       alt="Favicon preview" 
-                      className="w-5 h-5 object-contain"
+                      className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                       onError={e => {
                         (e.target as HTMLElement).style.display = 'none';
