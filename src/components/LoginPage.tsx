@@ -1,9 +1,9 @@
 import React from 'react';
 import { useAuth } from '../lib/auth-context';
-import { LogIn, BookOpen, User } from 'lucide-react';
+import { LogIn, BookOpen, User, AlertCircle, ExternalLink } from 'lucide-react';
 
 export function LoginPage() {
-  const { signIn, continueAsGuest } = useAuth();
+  const { signIn, continueAsGuest, authError, clearAuthError } = useAuth();
 
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-sans px-4">
@@ -18,6 +18,23 @@ export function LoginPage() {
             Organize your bookmarks, courses, videos, and articles in one place. Sign in to sync your data across devices.
           </p>
         </div>
+
+        {authError && (
+          <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl text-sm flex flex-col gap-3 text-left border border-red-100 dark:border-red-900/30">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <p>{authError}</p>
+            </div>
+            {authError.includes('preview window') && (
+              <button 
+                onClick={() => window.open(window.location.href, '_blank')}
+                className="w-full py-2 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors"
+              >
+                Open in New Tab <ExternalLink size={14} />
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="space-y-4">
           <button

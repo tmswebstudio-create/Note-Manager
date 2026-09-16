@@ -7,18 +7,22 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isGuest: boolean;
+  authError: string | null;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isGuest: false,
+  authError: null,
   signIn: async () => {},
   signOut: async () => {},
   continueAsGuest: () => {},
+  clearAuthError: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -27,6 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const { setResources, setCategories, resources, categories } = useStore();
 
   useEffect(() => {
@@ -67,6 +72,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check for redirect result on mount
     getRedirectResult(auth).catch((error) => {
       console.error("Error with redirect sign in:", error);
+      if (error.code === 'auth/internal-error') {
+        setAuthError("Google Sign-In is blocked in this preview window. Please open the app in a new tab using the icon in the top right to sign in.");
+      }
     });
 
     return () => unsubscribe();
@@ -100,18 +108,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async () => {
     try {
+      setAuthError(null);
       await signInWithPopup(auth, googleAuthProvider);
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user') {
-        console.log('Sign in cancelled by user, falling back to redirect...');
-        await signInWithRedirect(auth, googleAuthProvider);
+        console.log('Sign in cancelled by user.');
       } else if (error.code === 'auth/cross-origin-opener-policy-failed' || error.code === 'auth/internal-error') {
         console.log('Popup failed due to COOP/security restrictions, falling back to redirect...');
-        await signInWithRedirect(auth, googleAuthProvider);
+        try {
+          await signInWithRedirect(auth, googleAuthProvider);
+        } catch (redirectError: any) {
+          if (redirectError.code === 'auth/internal-error') {
+            setAuthError("Google Sign-In is blocked in this preview window. Please open the app in a new tab using the icon in the top right to sign in.");
+          } else {
+            setAuthError(redirectError.message);
+          }
+        }
       } else {
         console.error('Error signing in with Google', error);
-        // Fallback for any other unexpected popup blockage in iframe
-        await signInWithRedirect(auth, googleAuthProvider);
+        try {
+          await signInWithRedirect(auth, googleAuthProvider);
+        } catch (redirectError: any) {
+          if (redirectError.code === 'auth/internal-error') {
+            setAuthError("Google Sign-In is blocked in this preview window. Please open the app in a new tab using the icon in the top right to sign in.");
+          } else {
+            setAuthError(redirectError.message);
+          }
+        }
       }
     }
   };
@@ -133,8 +156,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('isGuestMode', 'true');
   };
 
+  const clearAuthError = () => {
+    setAuthError(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, isGuest, signIn, signOut, continueAsGuest }}>
+    <AuthContext.Provider value={{ user, loading, isGuest, authError, signIn, signOut, continueAsGuest, clearAuthError }}>
       {children}
     </AuthContext.Provider>
   );
