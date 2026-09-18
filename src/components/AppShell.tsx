@@ -6,6 +6,7 @@ import { ResourceGrid } from './ResourceGrid';
 import { BookmarkView } from './BookmarkView';
 import { AddBookmarkModal } from './AddBookmarkModal';
 import { AddResourceModal } from './AddResourceModal';
+import { SecurityModal } from './SecurityModal';
 import { Resource } from '../types';
 import { cn } from './Sidebar';
 
@@ -16,6 +17,7 @@ export function AppShell() {
   // Modals state
   const [isBookmarkModalOpen, setIsBookmarkModalOpen] = useState(false);
   const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [editingResource, setEditingResource] = useState<Resource | undefined>(undefined);
   const [modalCategoryDefaults, setModalCategoryDefaults] = useState<{ categoryId?: string; subcategoryId?: string }>({});
 
@@ -59,6 +61,7 @@ export function AppShell() {
         setIsMobileOpen={setIsMobileOpen}
         onAddBookmark={() => handleAddBookmark()}
         onAddResource={() => handleAddResource()}
+        onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
       />
       
       {/* Main Content */}
@@ -67,6 +70,7 @@ export function AppShell() {
           onMenuClick={() => setIsMobileOpen(true)} 
           onAddBookmark={() => handleAddBookmark()}
           onAddResource={() => handleAddResource()}
+          onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
         />
         
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
@@ -84,6 +88,12 @@ export function AppShell() {
         </div>
       </main>
       
+      {/* Security & Password Management Modal */}
+      <SecurityModal 
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+      />
+
       {/* Dedicated Add / Edit Bookmark Modal (Fetches Favicon) */}
       {isBookmarkModalOpen && (
         <AddBookmarkModal 

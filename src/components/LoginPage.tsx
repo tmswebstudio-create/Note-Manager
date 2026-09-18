@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth-context';
-import { BookOpen, User, AlertCircle, ExternalLink, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { BookOpen, User, AlertCircle, CheckCircle2, ExternalLink, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export function LoginPage() {
-  const { signInWithGoogle, signIn, signUp, continueAsGuest, authError, clearAuthError } = useAuth();
+  const { signInWithGoogle, signIn, signUp, sendPasswordReset, continueAsGuest, authError, clearAuthError } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
   const [isInIframe, setIsInIframe] = useState(false);
 
   useEffect(() => {
@@ -19,6 +21,28 @@ export function LoginPage() {
       setIsInIframe(true);
     }
   }, []);
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setResetError('Please type your email address above first.');
+      setResetMessage(null);
+      return;
+    }
+    setSubmitting(true);
+    setResetError(null);
+    setResetMessage(null);
+    clearAuthError();
+    try {
+      const res = await sendPasswordReset(email.trim());
+      if (res.success) {
+        setResetMessage(res.message || `Password reset link sent to ${email.trim()}. Please check your email inbox.`);
+      } else {
+        setResetError(res.error || 'Failed to send password reset email.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +106,26 @@ export function LoginPage() {
             <AlertCircle size={18} className="shrink-0 mt-0.5" />
             <div className="flex-1 text-xs sm:text-sm leading-relaxed">
               {authError}
+            </div>
+          </div>
+        )}
+
+        {/* Password Reset Success Notification */}
+        {resetMessage && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 p-4 rounded-2xl text-sm flex items-start gap-3 text-left border border-emerald-200/80 dark:border-emerald-900/50">
+            <CheckCircle2 size={18} className="shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex-1 text-xs sm:text-sm leading-relaxed">
+              {resetMessage}
+            </div>
+          </div>
+        )}
+
+        {/* Password Reset Error Notification */}
+        {resetError && (
+          <div className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 p-4 rounded-2xl text-sm flex items-start gap-3 text-left border border-amber-200/80 dark:border-amber-900/50">
+            <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs sm:text-sm leading-relaxed">
+              {resetError}
             </div>
           </div>
         )}
@@ -180,8 +224,16 @@ export function LoginPage() {
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                 Password
               </label>
-              {isSignUp && (
+              {isSignUp ? (
                 <span className="text-[11px] text-slate-400">Min. 6 characters</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer font-medium"
+                >
+                  Forgot password?
+                </button>
               )}
             </div>
             <div className="relative">

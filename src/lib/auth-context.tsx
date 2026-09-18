@@ -6,7 +6,13 @@ import {
   createUserWithEmailAndPassword, 
   updateProfile,
   signOut as firebaseSignOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  linkWithCredential,
+  EmailAuthProvider,
+  updatePassword,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth, googleAuthProvider } from './firebase.ts';
 import { useStore } from '../store/useStore.ts';
@@ -16,10 +22,15 @@ interface AuthContextType {
   loading: boolean;
   isGuest: boolean;
   authError: string | null;
+  hasPasswordProvider: boolean;
+  hasGoogleProvider: boolean;
   signInWithGoogle: () => Promise<void>;
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (email: string, pass: string, name?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  addPassword: (password: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (newPassword: string, currentPassword?: string) => Promise<{ success: boolean; error?: string }>;
+  sendPasswordReset: (email?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   continueAsGuest: () => void;
   clearAuthError: () => void;
 }
@@ -29,10 +40,15 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isGuest: false,
   authError: null,
+  hasPasswordProvider: false,
+  hasGoogleProvider: false,
   signInWithGoogle: async () => {},
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
+  addPassword: async () => ({ success: false, error: 'Not implemented' }),
+  changePassword: async () => ({ success: false, error: 'Not implemented' }),
+  sendPasswordReset: async () => ({ success: false, error: 'Not implemented' }),
   continueAsGuest: () => {},
   clearAuthError: () => {},
 });
@@ -213,8 +229,166 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
   };
 
+  const hasPasswordProvider = Boolean(
+    user?.providerData?.some((p) => p.providerId === 'password')
+  );
+
+  const hasGoogleProvider = Boolean(
+    user?.providerData?.some((p) => p.providerId === 'google.com')
+  );
+
+  const addPassword = async (password: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user || !user.email) {
+      return { success: false, error: 'No signed in user or email address found.' };
+    }
+    if (!password || password.length < 6) {
+      return { success: false, error: 'Password must be at least 6 characters long.' };
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(user.email, password);
+      await linkWithCredential(user, credential);
+      await user.reload();
+      if (auth.currentUser) {
+        setUser({ ...auth.currentUser });
+      }
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error linking password:', error);
+      if (error.code === 'auth/provider-already-linked') {
+        try {
+          await updatePassword(user, password);
+          await user.reload();
+          if (auth.currentUser) {
+            setUser({ ...auth.currentUser });
+          }
+          return { success: true };
+        } catch (updateErr: any) {
+          return { success: false, error: updateErr.message || 'Failed to update password.' };
+        }
+      }
+      if (error.code === 'auth/credential-already-in-use') {
+        return { 
+          success: false, 
+          error: 'An account with this email already has a password set. You can sign in using your email and password.' 
+        };
+      }
+      if (error.code === 'auth/requires-recent-login') {
+        try {
+          await reauthenticateWithPopup(user, googleAuthProvider);
+          const credential = EmailAuthProvider.credential(user.email, password);
+          await linkWithCredential(user, credential);
+          await user.reload();
+          if (auth.currentUser) {
+            setUser({ ...auth.currentUser });
+          }
+          return { success: true };
+        } catch {
+          return { 
+            success: false, 
+            error: 'Adding a password requires recent authentication. Please sign out and sign back in with Google, then try again.' 
+          };
+        }
+      }
+      if (error.code === 'auth/weak-password') {
+        return { success: false, error: 'Password is too weak. Please use at least 6 characters.' };
+      }
+      return { success: false, error: error.message || 'Failed to add password.' };
+    }
+  };
+
+  const changePassword = async (newPassword: string, currentPassword?: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user) {
+      return { success: false, error: 'No signed in user found.' };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: 'New password must be at least 6 characters long.' };
+    }
+
+    try {
+      if (currentPassword && user.email) {
+        const cred = EmailAuthProvider.credential(user.email, currentPassword);
+        await reauthenticateWithCredential(user, cred);
+      }
+      await updatePassword(user, newPassword);
+      await user.reload();
+      if (auth.currentUser) {
+        setUser({ ...auth.currentUser });
+      }
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error changing password:', error);
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        return { success: false, error: 'Current password is incorrect.' };
+      }
+      if (error.code === 'auth/requires-recent-login') {
+        if (hasGoogleProvider) {
+          try {
+            await reauthenticateWithPopup(user, googleAuthProvider);
+            await updatePassword(user, newPassword);
+            await user.reload();
+            if (auth.currentUser) {
+              setUser({ ...auth.currentUser });
+            }
+            return { success: true };
+          } catch {
+            // fall through
+          }
+        }
+        return { 
+          success: false, 
+          error: 'Security checkpoint: Please enter your current password or re-login to update your password.' 
+        };
+      }
+      if (error.code === 'auth/weak-password') {
+        return { success: false, error: 'New password is too weak. Please use at least 6 characters.' };
+      }
+      return { success: false, error: error.message || 'Failed to update password.' };
+    }
+  };
+
+  const sendPasswordReset = async (emailToReset?: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+    const targetEmail = emailToReset?.trim() || user?.email?.trim();
+    if (!targetEmail) {
+      return { success: false, error: 'Please specify an email address.' };
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, targetEmail);
+      return { 
+        success: true, 
+        message: `Password reset link sent to ${targetEmail}. Please check your inbox or spam folder.` 
+      };
+    } catch (error: any) {
+      console.error('Error sending password reset email:', error);
+      if (error.code === 'auth/user-not-found') {
+        return { success: false, error: 'No account found with this email address.' };
+      }
+      if (error.code === 'auth/invalid-email') {
+        return { success: false, error: 'Invalid email address format.' };
+      }
+      return { success: false, error: error.message || 'Failed to send reset email.' };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, isGuest, authError, signInWithGoogle, signIn, signUp, signOut, continueAsGuest, clearAuthError }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isGuest, 
+      authError, 
+      hasPasswordProvider,
+      hasGoogleProvider,
+      signInWithGoogle, 
+      signIn, 
+      signUp, 
+      signOut, 
+      addPassword,
+      changePassword,
+      sendPasswordReset,
+      continueAsGuest, 
+      clearAuthError 
+    }}>
       {children}
     </AuthContext.Provider>
   );

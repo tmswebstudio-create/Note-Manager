@@ -17,7 +17,9 @@ import {
   Layers, 
   ChevronRight, 
   ChevronDown,
-  FolderPlus
+  FolderPlus,
+  KeyRound,
+  ShieldCheck
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -363,9 +365,10 @@ interface SidebarProps {
   setIsMobileOpen: (v: boolean) => void;
   onAddBookmark?: () => void;
   onAddResource?: () => void;
+  onOpenSecurityModal?: () => void;
 }
 
-export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddResource }: SidebarProps) {
+export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddResource, onOpenSecurityModal }: SidebarProps) {
   const { 
     resources,
     categories, 
@@ -711,7 +714,7 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
             {theme === 'light' ? <Moon size={15} className="shrink-0" /> : <Sun size={15} className="shrink-0" />}
             {!isSidebarCollapsed && <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>}
           </button>
-          <AuthButton isSidebarCollapsed={isSidebarCollapsed} />
+          <AuthButton isSidebarCollapsed={isSidebarCollapsed} onOpenSecurityModal={onOpenSecurityModal} />
         </div>
       </aside>
 
@@ -728,8 +731,14 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
   );
 }
 
-function AuthButton({ isSidebarCollapsed }: { isSidebarCollapsed: boolean }) {
-  const { user, isGuest, signOut } = useAuth();
+function AuthButton({ 
+  isSidebarCollapsed, 
+  onOpenSecurityModal 
+}: { 
+  isSidebarCollapsed: boolean; 
+  onOpenSecurityModal?: () => void;
+}) {
+  const { user, isGuest, signOut, hasPasswordProvider } = useAuth();
   const { userName } = useStore();
   const effectiveName = user?.displayName?.trim() || (userName !== 'Guest' ? userName : null) || (user?.email ? user.email.split('@')[0] : (isGuest ? 'Guest' : 'User'));
   
@@ -756,6 +765,32 @@ function AuthButton({ isSidebarCollapsed }: { isSidebarCollapsed: boolean }) {
             </div>
           </div>
         )}
+
+        {/* Password & Security Button */}
+        {user && onOpenSecurityModal && (
+          <button 
+            type="button"
+            onClick={onOpenSecurityModal}
+            className={cn(
+              "flex items-center justify-between py-1.5 px-2.5 text-xs font-medium rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 transition-colors",
+              isSidebarCollapsed ? "w-full justify-center p-2" : "w-full"
+            )}
+            title={hasPasswordProvider ? "Password & Security" : "Add Password (Enable Email Login)"}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <KeyRound size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+              {!isSidebarCollapsed && (
+                <span className="truncate">{hasPasswordProvider ? "Password & Security" : "Add Password"}</span>
+              )}
+            </div>
+            {!isSidebarCollapsed && !hasPasswordProvider && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 shrink-0">
+                Email Login
+              </span>
+            )}
+          </button>
+        )}
+
         <button 
           onClick={signOut}
           className={cn(
