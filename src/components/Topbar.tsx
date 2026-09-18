@@ -1,6 +1,6 @@
 import { useStore } from '../store/useStore';
 import { useAuth } from '../lib/auth-context';
-import { Search, Globe, Layers, Menu } from 'lucide-react';
+import { Search, Globe, Layers, Menu, Users, RefreshCw, Eye } from 'lucide-react';
 import { CategoryIcon } from './CategoryIcon';
 
 interface TopbarProps {
@@ -8,11 +8,29 @@ interface TopbarProps {
   onAddBookmark: () => void;
   onAddResource: () => void;
   onOpenSecurityModal?: () => void;
+  onOpenCollaborateModal?: (defaultTab?: 'members' | 'workspaces' | 'join') => void;
 }
 
-export function Topbar({ onMenuClick, onAddBookmark, onAddResource, onOpenSecurityModal }: TopbarProps) {
-  const { activeView, activeCategoryId, activeSubcategoryId, categories, searchQuery, setSearchQuery, resources, userName } = useStore();
-  const { user, isGuest, hasPasswordProvider } = useAuth();
+export function Topbar({ 
+  onMenuClick, 
+  onAddBookmark, 
+  onAddResource, 
+  onOpenSecurityModal,
+  onOpenCollaborateModal 
+}: TopbarProps) {
+  const { 
+    activeView, 
+    activeCategoryId, 
+    activeSubcategoryId, 
+    categories, 
+    searchQuery, 
+    setSearchQuery, 
+    resources, 
+    userName,
+    activeDashboardRole,
+    isSyncing 
+  } = useStore();
+  const { user, isGuest, hasPasswordProvider, activeDashboard } = useAuth();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -110,6 +128,39 @@ export function Topbar({ onMenuClick, onAddBookmark, onAddResource, onOpenSecuri
               className="pl-9 pr-4 py-1.5 w-44 lg:w-56 bg-slate-100 dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-full text-xs focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 transition-all"
             />
           </div>
+
+          {/* Viewer status badge */}
+          {activeDashboardRole === 'viewer' && (
+            <span className="hidden md:flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 rounded-full border border-amber-200 dark:border-amber-800">
+              <Eye size={12} />
+              <span>Read-only</span>
+            </span>
+          )}
+
+          {/* Sync status indicator */}
+          {isSyncing && (
+            <div className="hidden xl:flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+              <RefreshCw size={11} className="animate-spin text-indigo-500" />
+              <span>Syncing</span>
+            </div>
+          )}
+
+          {/* Collaborate button */}
+          {onOpenCollaborateModal && user && !isGuest && (
+            <button 
+              onClick={() => onOpenCollaborateModal('members')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-full border border-indigo-200/80 dark:border-indigo-800/80 transition-all active:scale-95 shadow-xs"
+              title="Manage collaborators, invite links, and dashboards"
+            >
+              <Users size={14} />
+              <span className="hidden sm:inline">Collaborate</span>
+              {activeDashboard?.memberCount && activeDashboard.memberCount > 1 ? (
+                <span className="px-1.5 py-0.2 bg-indigo-200/80 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-200 rounded-full text-[10px] font-bold">
+                  {activeDashboard.memberCount}
+                </span>
+              ) : null}
+            </button>
+          )}
 
           {/* Dedicated 2 Add Buttons */}
           <button 

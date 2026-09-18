@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Resource, Category } from '../types';
+import { Resource, Category, Dashboard, MemberRole } from '../types';
 
 interface AppState {
   resources: Resource[];
@@ -12,6 +12,14 @@ interface AppState {
   theme: 'light' | 'dark';
   isSidebarCollapsed: boolean;
   userName: string;
+  
+  // Dashboard & Collaboration
+  dashboards: Dashboard[];
+  activeDashboardId: string | null;
+  activeDashboardRole: MemberRole;
+  isDashboardOwner: boolean;
+  isSyncing: boolean;
+  lastServerVersion: number;
   
   // Actions
   addResource: (resource: Omit<Resource, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => void;
@@ -37,6 +45,12 @@ interface AppState {
   setUserName: (name: string) => void;
   setResources: (resources: Resource[]) => void;
   setCategories: (categories: Category[]) => void;
+  
+  setDashboards: (dashboards: Dashboard[]) => void;
+  setActiveDashboardId: (id: string | null) => void;
+  setActiveDashboardRole: (role: MemberRole, isOwner: boolean) => void;
+  setIsSyncing: (isSyncing: boolean) => void;
+  setLastServerVersion: (version: number) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -51,6 +65,19 @@ export const useStore = create<AppState>()(
       theme: 'light',
       isSidebarCollapsed: false,
       userName: 'Guest',
+
+      dashboards: [],
+      activeDashboardId: null,
+      activeDashboardRole: 'owner',
+      isDashboardOwner: true,
+      isSyncing: false,
+      lastServerVersion: 0,
+
+      setDashboards: (dashboards) => set({ dashboards }),
+      setActiveDashboardId: (id) => set({ activeDashboardId: id }),
+      setActiveDashboardRole: (role, isOwner) => set({ activeDashboardRole: role, isDashboardOwner: isOwner }),
+      setIsSyncing: (isSyncing) => set({ isSyncing }),
+      setLastServerVersion: (lastServerVersion) => set({ lastServerVersion }),
 
       setResources: (resources) => set({ resources }),
       setCategories: (categories) => set({ categories }),
@@ -313,7 +340,8 @@ export const useStore = create<AppState>()(
         categories: state.categories,
         theme: state.theme,
         isSidebarCollapsed: state.isSidebarCollapsed,
-        userName: state.userName
+        userName: state.userName,
+        activeDashboardId: state.activeDashboardId
       }),
     }
   )

@@ -7,6 +7,7 @@ import { BookmarkView } from './BookmarkView';
 import { AddBookmarkModal } from './AddBookmarkModal';
 import { AddResourceModal } from './AddResourceModal';
 import { SecurityModal } from './SecurityModal';
+import { CollaborateModal } from './CollaborateModal';
 import { Resource } from '../types';
 import { cn } from './Sidebar';
 
@@ -18,8 +19,15 @@ export function AppShell() {
   const [isBookmarkModalOpen, setIsBookmarkModalOpen] = useState(false);
   const [isResourceModalOpen, setIsResourceModalOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isCollaborateModalOpen, setIsCollaborateModalOpen] = useState(false);
+  const [collaborateModalTab, setCollaborateModalTab] = useState<'members' | 'workspaces' | 'join'>('members');
   const [editingResource, setEditingResource] = useState<Resource | undefined>(undefined);
   const [modalCategoryDefaults, setModalCategoryDefaults] = useState<{ categoryId?: string; subcategoryId?: string }>({});
+
+  const handleOpenCollaborateModal = (tab: 'members' | 'workspaces' | 'join' = 'members') => {
+    setCollaborateModalTab(tab);
+    setIsCollaborateModalOpen(true);
+  };
 
   // Apply theme class to document
   useEffect(() => {
@@ -62,6 +70,7 @@ export function AppShell() {
         onAddBookmark={() => handleAddBookmark()}
         onAddResource={() => handleAddResource()}
         onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
+        onOpenCollaborateModal={handleOpenCollaborateModal}
       />
       
       {/* Main Content */}
@@ -71,6 +80,7 @@ export function AppShell() {
           onAddBookmark={() => handleAddBookmark()}
           onAddResource={() => handleAddResource()}
           onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
+          onOpenCollaborateModal={handleOpenCollaborateModal}
         />
         
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
@@ -88,6 +98,13 @@ export function AppShell() {
         </div>
       </main>
       
+      {/* Collaborate & Workspaces Modal */}
+      <CollaborateModal 
+        isOpen={isCollaborateModalOpen}
+        onClose={() => setIsCollaborateModalOpen(false)}
+        defaultTab={collaborateModalTab}
+      />
+
       {/* Security & Password Management Modal */}
       <SecurityModal 
         isOpen={isSecurityModalOpen}

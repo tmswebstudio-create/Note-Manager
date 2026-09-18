@@ -1,23 +1,33 @@
 import { db } from './index.ts';
-import { categories, resources } from './schema.ts';
-import { eq } from 'drizzle-orm';
+import { categories, resources, dashboards } from './schema.ts';
+import { eq, and } from 'drizzle-orm';
 
-export async function syncUserData(userId: number, data: any) {
+export async function syncUserData(dashboardId: string, userId: number, data: any) {
   await db.transaction(async (tx) => {
-    // Delete existing
-    await tx.delete(resources).where(eq(resources.userId, userId));
-    await tx.delete(categories).where(eq(categories.userId, userId));
+    // Delete existing resources and categories for this specific dashboard
+    await tx.delete(resources).where(eq(resources.dashboardId, dashboardId));
+    await tx.delete(categories).where(eq(categories.dashboardId, dashboardId));
     
-    // Insert new categories (parents first, then subcategories if needed)
+    // Insert new categories (parents first, then subcategories)
     if (data.categories && data.categories.length > 0) {
-      const catsToInsert = data.categories.map((c: any) => ({
+      // Sort parents (parentId == null or falsy) first to avoid foreign key errors on subcategories
+      const sortedCats = [...data.categories].sort((a, b) => {
+        const aHasParent = Boolean(a.parentId);
+        const bHasParent = Boolean(b.parentId);
+        if (!aHasParent && bHasParent) return -1;
+        if (aHasParent && !bHasParent) return 1;
+        return (a.order || 0) - (b.order || 0);
+      });
+
+      const catsToInsert = sortedCats.map((c: any) => ({
         id: c.id,
+        dashboardId,
         userId,
         parentId: c.parentId || null,
         name: c.name,
         icon: c.icon,
         color: c.color,
-        order: c.order,
+        order: c.order ?? 0,
         createdAt: new Date(c.createdAt || Date.now()),
       }));
       await tx.insert(categories).values(catsToInsert);
@@ -27,6 +37,7 @@ export async function syncUserData(userId: number, data: any) {
     if (data.resources && data.resources.length > 0) {
       const resToInsert = data.resources.map((r: any) => ({
         id: r.id,
+        dashboardId,
         userId,
         categoryId: r.categoryId,
         subcategoryId: r.subcategoryId || null,
@@ -35,30 +46,35 @@ export async function syncUserData(userId: number, data: any) {
         type: r.type,
         coverImage: r.coverImage,
         description: r.description,
-        favorite: r.favorite,
-        completed: r.completed,
-        pinned: r.pinned,
+        favorite: Boolean(r.favorite),
+        completed: Boolean(r.completed),
+        pinned: Boolean(r.pinned),
         createdAt: new Date(r.createdAt || Date.now()),
         updatedAt: new Date(r.updatedAt || Date.now()),
         lastOpenedAt: r.lastOpenedAt ? new Date(r.lastOpenedAt) : null,
-        order: r.order,
+        order: r.order ?? 0,
       }));
       await tx.insert(resources).values(resToInsert);
     }
+
+    // Touch dashboard updatedAt timestamp
+    await tx.update(dashboards)
+      .set({ updatedAt: new Date() })
+      .where(eq(dashboards.id, dashboardId));
   });
 }
 
-export async function getUserData(userId: number) {
-  const userCategories = await db.select().from(categories).where(eq(categories.userId, userId));
-  const userResources = await db.select().from(resources).where(eq(resources.userId, userId));
+export async function getUserData(dashboardId: string) {
+  const dashCategories = await db.select().from(categories).where(eq(categories.dashboardId, dashboardId));
+  const dashResources = await db.select().from(resources).where(eq(resources.dashboardId, dashboardId));
   
   return {
-    categories: userCategories.map(c => ({
+    categories: dashCategories.map(c => ({
       ...c,
       parentId: c.parentId || undefined,
       createdAt: c.createdAt?.getTime() || Date.now(),
     })),
-    resources: userResources.map(r => ({
+    resources: dashResources.map(r => ({
       ...r,
       subcategoryId: r.subcategoryId || undefined,
       createdAt: r.createdAt?.getTime() || Date.now(),

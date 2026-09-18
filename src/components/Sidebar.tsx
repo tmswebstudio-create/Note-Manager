@@ -30,6 +30,7 @@ import { Category } from '../types';
 import { CategoryIcon } from './CategoryIcon';
 import { CategoryModal } from './CategoryModal';
 import { isResourceCategory } from '../utils/category-helpers';
+import { WorkspaceSelector } from './WorkspaceSelector';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -366,9 +367,17 @@ interface SidebarProps {
   onAddBookmark?: () => void;
   onAddResource?: () => void;
   onOpenSecurityModal?: () => void;
+  onOpenCollaborateModal?: (defaultTab?: 'members' | 'workspaces' | 'join') => void;
 }
 
-export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddResource, onOpenSecurityModal }: SidebarProps) {
+export function Sidebar({ 
+  isMobileOpen, 
+  setIsMobileOpen, 
+  onAddBookmark, 
+  onAddResource, 
+  onOpenSecurityModal,
+  onOpenCollaborateModal 
+}: SidebarProps) {
   const { 
     resources,
     categories, 
@@ -513,6 +522,16 @@ export function Sidebar({ isMobileOpen, setIsMobileOpen, onAddBookmark, onAddRes
             {isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>
         </div>
+
+        {/* Workspace selector & Collaboration */}
+        {onOpenCollaborateModal && (
+          <div className={cn("border-b border-slate-200 dark:border-slate-800/80", isSidebarCollapsed ? "p-2" : "px-3 py-2.5")}>
+            <WorkspaceSelector 
+              collapsed={isSidebarCollapsed} 
+              onOpenCollaborateModal={onOpenCollaborateModal} 
+            />
+          </div>
+        )}
 
         {/* Navigation Sections */}
         <div className="flex-1 overflow-y-auto py-4 overflow-x-hidden space-y-6">

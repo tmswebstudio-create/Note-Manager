@@ -5,6 +5,21 @@ import * as cheerio from 'cheerio';
 import cors from 'cors';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { syncUserData, getUserData } from './src/db/sync.ts';
+import {
+  getUserDashboards,
+  createDashboard,
+  renameDashboard,
+  deleteDashboard,
+  getDashboardMembers,
+  inviteCollaborator,
+  removeCollaborator,
+  joinDashboardWithCode,
+  checkDashboardAccess,
+  ensureUserDefaultDashboard
+} from './src/db/dashboards.ts';
+
+// In-memory dashboard version map for snappy real-time sync across different browsers/emails
+const dashboardVersions = new Map<string, number>();
 
 function cleanAndNormalizeUrl(rawUrl: string): string | null {
   if (!rawUrl) return null;
@@ -40,12 +55,167 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
   app.use(cors());
 
-  // API Data Endpoints
+  // --- DASHBOARD & COLLABORATION ENDPOINTS ---
+
+  // Get all accessible dashboards for logged in user
+  app.get('/api/dashboards', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const dashboards = await getUserDashboards(req.dbUser.id, req.dbUser.email);
+      res.json({ dashboards });
+    } catch (error) {
+      console.error('Failed to get dashboards:', error);
+      res.status(500).json({ error: 'Failed to retrieve workspaces' });
+    }
+  });
+
+  // Create a new dashboard
+  app.post('/api/dashboards', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { name } = req.body;
+      const dashboard = await createDashboard(req.dbUser.id, req.dbUser.email, name || 'New Workspace');
+      res.status(201).json({ dashboard });
+    } catch (error: any) {
+      console.error('Failed to create dashboard:', error);
+      res.status(500).json({ error: error?.message || 'Failed to create workspace' });
+    }
+  });
+
+  // Rename a dashboard
+  app.patch('/api/dashboards/:id', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { id } = req.params;
+      const { name } = req.body;
+      if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+      await renameDashboard(id, req.dbUser.id, req.dbUser.email, name);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Failed to rename dashboard:', error);
+      res.status(403).json({ error: error?.message || 'Failed to rename workspace' });
+    }
+  });
+
+  // Delete dashboard (owner only)
+  app.delete('/api/dashboards/:id', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { id } = req.params;
+      await deleteDashboard(id, req.dbUser.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Failed to delete dashboard:', error);
+      res.status(403).json({ error: error?.message || 'Failed to delete workspace' });
+    }
+  });
+
+  // Get members / collaborators for a dashboard
+  app.get('/api/dashboards/:id/members', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { id } = req.params;
+      const members = await getDashboardMembers(id, req.dbUser.id, req.dbUser.email);
+      res.json({ members });
+    } catch (error: any) {
+      console.error('Failed to get dashboard members:', error);
+      res.status(403).json({ error: error?.message || 'Failed to load collaborators' });
+    }
+  });
+
+  // Invite collaborator by email
+  app.post('/api/dashboards/:id/invite', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { id } = req.params;
+      const { email, role } = req.body;
+      if (!email) return res.status(400).json({ error: 'Email is required' });
+
+      const result = await inviteCollaborator(id, req.dbUser.id, req.dbUser.email, email, role || 'editor');
+      res.json(result);
+    } catch (error: any) {
+      console.error('Failed to invite collaborator:', error);
+      res.status(400).json({ error: error?.message || 'Failed to invite collaborator' });
+    }
+  });
+
+  // Remove collaborator or leave dashboard
+  app.delete('/api/dashboards/:id/members/:memberId', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { id, memberId } = req.params;
+      await removeCollaborator(id, req.dbUser.id, req.dbUser.email, parseInt(memberId, 10));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Failed to remove collaborator:', error);
+      res.status(400).json({ error: error?.message || 'Failed to remove collaborator' });
+    }
+  });
+
+  // Join a dashboard via invite code
+  app.post('/api/dashboards/join', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { inviteCode } = req.body;
+      if (!inviteCode || !inviteCode.trim()) {
+        return res.status(400).json({ error: 'Invite code is required' });
+      }
+      const result = await joinDashboardWithCode(req.dbUser.id, req.dbUser.email, inviteCode);
+      res.json(result);
+    } catch (error: any) {
+      console.error('Failed to join dashboard:', error);
+      res.status(400).json({ error: error?.message || 'Failed to join dashboard' });
+    }
+  });
+
+  // Lightweight version check for real-time multi-user syncing
+  app.get('/api/dashboards/:id/version', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
+      const { id } = req.params;
+      const version = dashboardVersions.get(id) || 0;
+      res.json({ version });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get version' });
+    }
+  });
+
+  // --- API DATA & SYNC ENDPOINTS (SCOPED TO ACTIVE DASHBOARD) ---
+
   app.get('/api/data', requireAuth, async (req: AuthRequest, res) => {
     try {
       if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
-      const data = await getUserData(req.dbUser.id);
-      res.json(data);
+
+      let targetDashboardId = req.query.dashboardId as string;
+      if (!targetDashboardId) {
+        // Fallback to user's first accessible dashboard
+        const userDashboards = await getUserDashboards(req.dbUser.id, req.dbUser.email);
+        if (userDashboards.length === 0) {
+          await ensureUserDefaultDashboard(req.dbUser.id, req.dbUser.email);
+          const fresh = await getUserDashboards(req.dbUser.id, req.dbUser.email);
+          targetDashboardId = fresh[0]?.id;
+        } else {
+          targetDashboardId = userDashboards[0].id;
+        }
+      }
+
+      if (!targetDashboardId) {
+        return res.json({ categories: [], resources: [], dashboardId: null });
+      }
+
+      const access = await checkDashboardAccess(targetDashboardId, req.dbUser.id, req.dbUser.email);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: 'Access denied to this workspace' });
+      }
+
+      const data = await getUserData(targetDashboardId);
+      res.json({
+        ...data,
+        dashboardId: targetDashboardId,
+        role: access.role,
+        isOwner: access.isOwner,
+        version: dashboardVersions.get(targetDashboardId) || Date.now(),
+      });
     } catch (error) {
       console.error('Failed to get data:', error);
       res.status(500).json({ error: 'Failed to get data' });
@@ -55,13 +225,33 @@ async function startServer() {
   app.post('/api/sync', requireAuth, async (req: AuthRequest, res) => {
     try {
       if (!req.dbUser) return res.status(401).json({ error: 'User not found in DB' });
-      await syncUserData(req.dbUser.id, req.body);
-      res.json({ success: true });
+
+      const { dashboardId, categories: cats, resources: ress } = req.body;
+      if (!dashboardId) {
+        return res.status(400).json({ error: 'dashboardId is required for sync' });
+      }
+
+      const access = await checkDashboardAccess(dashboardId, req.dbUser.id, req.dbUser.email);
+      if (!access.hasAccess) {
+        return res.status(403).json({ error: 'Access denied to this workspace' });
+      }
+
+      if (access.role === 'viewer') {
+        return res.status(403).json({ error: 'Viewers have read-only access and cannot save changes.' });
+      }
+
+      await syncUserData(dashboardId, req.dbUser.id, { categories: cats, resources: ress });
+      
+      const newVersion = Date.now();
+      dashboardVersions.set(dashboardId, newVersion);
+
+      res.json({ success: true, version: newVersion });
     } catch (error) {
       console.error('Failed to sync data:', error);
       res.status(500).json({ error: 'Failed to sync data' });
     }
   });
+
 
   // API Route for URL metadata fetching
   app.post('/api/metadata', async (req, res) => {
